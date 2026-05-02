@@ -1,0 +1,84 @@
+volumes:
+  kelem_co_backend_local_postgres_data: {}
+  kelem_co_backend_local_postgres_data_backups: {}
+
+
+services:
+  django:
+    build:
+      context: .
+      dockerfile: ./compose/local/django/Dockerfile
+    image: kelem_co_backend_local_django
+    container_name: kelem_co_backend_local_django
+    depends_on:
+      - postgres
+      - mailpit
+    volumes:
+      - /app/.venv
+      - .:/app:z
+    env_file:
+      - ./.envs/.local/.django
+      - ./.envs/.local/.postgres
+    ports:
+      - '8000:8000'
+    command: /start
+
+  postgres:
+    build:
+      context: .
+      dockerfile: ./compose/production/postgres/Dockerfile
+    image: kelem_co_backend_production_postgres
+    container_name: kelem_co_backend_local_postgres
+    volumes:
+      - kelem_co_backend_local_postgres_data:/var/lib/postgresql/18/docker
+      - kelem_co_backend_local_postgres_data_backups:/backups
+    env_file:
+      - ./.envs/.local/.postgres
+
+  mailpit:
+    image: docker.io/axllent/mailpit:latest
+    container_name: kelem_co_backend_local_mailpit
+    ports:
+      - "8025:8025"
+
+  redis:
+    image: redis:8.6-alpine
+    container_name: kelem_co_backend_local_redis
+    ports:
+      - "6386:6379"
+
+  celeryworker:
+    build:
+      context: .
+      dockerfile: ./compose/local/django/Dockerfile
+    image: kelem_co_backend_local_celeryworker
+    container_name: kelem_co_backend_local_celeryworker
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - /app/.venv
+      - .:/app:z
+    env_file:
+      - ./.envs/.local/.django
+      - ./.envs/.local/.postgres
+    command: ["celery", "-A", "config", "worker", "-l", "info"]
+
+  flower:
+    build:
+      context: .
+      dockerfile: ./compose/local/django/Dockerfile
+    image: kelem_co_backend_local_flower
+    container_name: kelem_co_backend_local_flower
+    depends_on:
+      - redis
+      - postgres
+    volumes:
+      - /app/.venv
+      - .:/app:z
+    env_file:
+      - ./.envs/.local/.django
+      - ./.envs/.local/.postgres
+    ports:
+      - "5555:5555"
+    command: ["celery", "-A", "config", "flower", "--port=5555"]
