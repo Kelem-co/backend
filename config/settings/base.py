@@ -5,6 +5,7 @@ import ssl
 from pathlib import Path
 
 import environ
+from celery.schedules import crontab
 
 BASE_DIR = Path(__file__).resolve(strict=True).parent.parent.parent
 # backend/
@@ -83,6 +84,7 @@ THIRD_PARTY_APPS = [
 
 LOCAL_APPS = [
     "backend.users",
+    "backend.uploads",
     # Your stuff: custom apps go here
 ]
 # https://docs.djangoproject.com/en/dev/ref/settings/#installed-apps
@@ -163,6 +165,41 @@ STATICFILES_FINDERS = [
 MEDIA_ROOT = str(APPS_DIR / "media")
 # https://docs.djangoproject.com/en/dev/ref/settings/#media-url
 MEDIA_URL = "/media/"
+
+# Object storage for direct uploads
+# ------------------------------------------------------------------------------
+MEDIA_STORAGE_BUCKET_NAME = env("MEDIA_STORAGE_BUCKET_NAME", default="media")
+MEDIA_STORAGE_ENDPOINT_URL = env("MEDIA_STORAGE_ENDPOINT_URL", default="") or None
+MEDIA_STORAGE_REGION_NAME = env("MEDIA_STORAGE_REGION_NAME", default="us-east-1")
+MEDIA_STORAGE_ACCESS_KEY_ID = env("MEDIA_STORAGE_ACCESS_KEY_ID", default="")
+MEDIA_STORAGE_SECRET_ACCESS_KEY = env("MEDIA_STORAGE_SECRET_ACCESS_KEY", default="")
+MEDIA_STORAGE_MAX_UPLOAD_SIZE = env.int(
+    "MEDIA_STORAGE_MAX_UPLOAD_SIZE",
+    default=25 * 1024 * 1024,
+)
+MEDIA_STORAGE_PRESIGNED_URL_EXPIRATION = env.int(
+    "MEDIA_STORAGE_PRESIGNED_URL_EXPIRATION",
+    default=900,
+)
+MEDIA_STORAGE_FINGERPRINT_WINDOW_SECONDS = env.int(
+    "MEDIA_STORAGE_FINGERPRINT_WINDOW_SECONDS",
+    default=300,
+)
+MEDIA_STORAGE_ALLOWED_CONTENT_TYPES = tuple(
+    env.list(
+        "MEDIA_STORAGE_ALLOWED_CONTENT_TYPES",
+        default=[
+            "image/gif",
+            "image/jpeg",
+            "image/png",
+            "image/webp",
+            "audio/mpeg",
+            "audio/ogg",
+            "video/mp4",
+            "application/pdf",
+        ],
+    ),
+)
 
 # TEMPLATES
 # ------------------------------------------------------------------------------
@@ -256,6 +293,13 @@ LOGGING = {
         },
     },
     "root": {"level": "INFO", "handlers": ["console"]},
+}
+
+CELERY_BEAT_SCHEDULE = {
+    "cleanup-stale-media-uploads": {
+        "task": "backend.uploads.tasks.cleanup_stale_pending_uploads",
+        "schedule": crontab(minute="*/15"),
+    },
 }
 
 REDIS_URL = env("REDIS_URL", default="redis://redis:6379/0")

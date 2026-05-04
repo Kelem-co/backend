@@ -9,3 +9,4 @@ api = NinjaAPI(
 )
 
 api.add_router("/users/", "backend.users.api.views.router")
+api.add_router("/media/", "backend.uploads.api.views.router")
