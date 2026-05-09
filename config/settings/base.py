@@ -2,11 +2,13 @@
 """Base settings to build other settings files upon."""
 
 import ssl
+import sys
 from pathlib import Path
 
 import environ
 
 BASE_DIR = Path(__file__).resolve(strict=True).parent.parent.parent
+sys.path.append(str(BASE_DIR / "apps"))
 # core/
 APPS_DIR = BASE_DIR / "core"
 env = environ.Env()
@@ -85,7 +87,11 @@ THIRD_PARTY_APPS = [
 ]
 
 LOCAL_APPS = [
-    "core.users",
+    "accounts",
+    "organizations",
+    "schools",
+    "academics",
+    "core",
     # Your stuff: custom apps go here
 ]
 # https://docs.djangoproject.com/en/dev/ref/settings/#installed-apps
@@ -104,9 +110,9 @@ AUTHENTICATION_BACKENDS = [
     "allauth.account.auth_backends.AuthenticationBackend",
 ]
 # https://docs.djangoproject.com/en/dev/ref/settings/#auth-user-model
-AUTH_USER_MODEL = "users.User"
+AUTH_USER_MODEL = "accounts.User"
 # https://docs.djangoproject.com/en/dev/ref/settings/#login-redirect-url
-LOGIN_REDIRECT_URL = "users:redirect"
+LOGIN_REDIRECT_URL = "accounts:redirect"
 # https://docs.djangoproject.com/en/dev/ref/settings/#login-url
 LOGIN_URL = "account_login"
 
@@ -189,7 +195,7 @@ TEMPLATES = [
                 "django.template.context_processors.static",
                 "django.template.context_processors.tz",
                 "django.contrib.messages.context_processors.messages",
-                "core.users.context_processors.allauth_settings",
+                "accounts.context_processors.allauth_settings",
             ],
         },
     },
@@ -314,13 +320,13 @@ ACCOUNT_SIGNUP_FIELDS = ["email*", "username*", "password1*", "password2*"]
 # https://docs.allauth.org/en/latest/account/configuration.html
 ACCOUNT_EMAIL_VERIFICATION = "mandatory"
 # https://docs.allauth.org/en/latest/account/configuration.html
-ACCOUNT_ADAPTER = "core.users.adapters.AccountAdapter"
+ACCOUNT_ADAPTER = "accounts.adapters.AccountAdapter"
 # https://docs.allauth.org/en/latest/account/forms.html
-ACCOUNT_FORMS = {"signup": "core.users.forms.UserSignupForm"}
+ACCOUNT_FORMS = {"signup": "accounts.forms.UserSignupForm"}
 # https://docs.allauth.org/en/latest/socialaccount/configuration.html
-SOCIALACCOUNT_ADAPTER = "core.users.adapters.SocialAccountAdapter"
+SOCIALACCOUNT_ADAPTER = "accounts.adapters.SocialAccountAdapter"
 # https://docs.allauth.org/en/latest/socialaccount/configuration.html
-SOCIALACCOUNT_FORMS = {"signup": "core.users.forms.UserSocialSignupForm"}
+SOCIALACCOUNT_FORMS = {"signup": "accounts.forms.UserSocialSignupForm"}
 
 # django-rest-framework
 # -------------------------------------------------------------------------------
