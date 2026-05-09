@@ -226,6 +226,23 @@ EMAIL_BACKEND = env(
 )
 # https://docs.djangoproject.com/en/dev/ref/settings/#email-timeout
 EMAIL_TIMEOUT = 5
+# https://docs.djangoproject.com/en/dev/ref/settings/#default-from-email
+DEFAULT_FROM_EMAIL = env(
+    "DJANGO_DEFAULT_FROM_EMAIL",
+    default="noreply@example.com",
+)
+# Frontend URL for generating activation/password reset links in emails
+# Used by Djoser email classes to generate ACTIVATION_URL and PASSWORD_RESET_CONFIRM_URL
+# Format: https://yourdomain.com (no trailing slash)
+FRONTEND_DOMAIN = env(
+    "FRONTEND_DOMAIN",
+    default="http://localhost:3000",
+)
+# Whether to use HTTPS in email links (useful for localhost:8000 but remote is https)
+FRONTEND_PROTOCOL = env(
+    "FRONTEND_PROTOCOL",
+    default="http" if DEBUG else "https",
+)
 
 # ADMIN
 # ------------------------------------------------------------------------------
@@ -359,4 +376,15 @@ DJOSER = {
     "SERIALIZERS": {
         "user_create": "core.users.api.serializers.UserCreateSerializer",
     },
+    "SEND_ACTIVATION_EMAIL": True,
+    "SEND_CONFIRMATION_EMAIL": True,
+    "PASSWORD_CHANGED_EMAIL_CONFIRMATION": True,
+    "EMAIL": {
+        "activation": "core.users.email.ActivationEmail",
+        "confirmation": "core.users.email.ConfirmationEmail",
+        "password_reset": "core.users.email.PasswordResetEmail",
+        "password_changed_confirmation": "core.users.email.PasswordChangedConfirmationEmail",
+    },
+    "ACTIVATION_URL": "activate/{uid}/{token}",
+    "PASSWORD_RESET_CONFIRM_URL": "reset-password/{uid}/{token}",
 }

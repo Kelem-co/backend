@@ -16,7 +16,6 @@ class UserSerializer(serializers.ModelSerializer[User]):
 
 class UserCreateSerializer(DjoserUserCreateSerializer):
     class Meta(DjoserUserCreateSerializer.Meta):
-        model = User
         fields = (
             *DjoserUserCreateSerializer.Meta.fields,
             "father_name",

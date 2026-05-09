@@ -1,0 +1,191 @@
+{% load i18n %}
+
+<table width="100%"
+       border="0"
+       cellpadding="0"
+       cellspacing="0"
+       style="background-color: #f4f5f7;
+              margin: 0;
+              padding: 0;
+              width: 100%">
+  <tr>
+    <td align="center" style="padding: 40px 20px;">
+      <table width="100%"
+             border="0"
+             cellpadding="0"
+             cellspacing="0"
+             style="max-width: 600px;
+                    background-color: #ffffff;
+                    border: 1px solid #e5e7eb;
+                    border-radius: 8px;
+                    overflow: hidden">
+        <tr>
+          <td align="center" style="padding: 30px 30px 20px 30px;">
+            <table border="0" cellpadding="0" cellspacing="0" style="margin: 0 auto;">
+              <tr>
+                <td align="center"
+                    style="width: 48px;
+                           height: 48px;
+                           background-color: #1e2875;
+                           border-radius: 6px;
+                           font-size: 24px;
+                           color: #ffffff;
+                           line-height: 48px;
+                           font-weight: bold">✓</td>
+              </tr>
+            </table>
+            <h1 style="margin: 20px 0 0 0;
+                       font-size: 24px;
+                       font-weight: bold;
+                       color: #111827;
+                       text-align: center;
+                       line-height: 1.4">{{ heading }}</h1>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding: 0 30px;">
+            <table width="100%" border="0" cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="padding: 20px 0; border-bottom: 1px dashed #e5e7eb;">
+                  <table width="100%" border="0" cellpadding="0" cellspacing="0">
+                    <tr>
+                      <td valign="top" style="width: 52px; padding-right: 12px;">
+                        <table border="0" cellpadding="0" cellspacing="0">
+                          <tr>
+                            <td align="center"
+                                style="width: 40px;
+                                       height: 40px;
+                                       background-color: #f0f1f3;
+                                       border-radius: 50%;
+                                       font-size: 20px;
+                                       color: #8a8d91;
+                                       line-height: 40px">👤</td>
+                          </tr>
+                        </table>
+                      </td>
+                      <td valign="top">
+                        <table border="0" cellpadding="0" cellspacing="0">
+                          <tr>
+                            <td style="font-weight: bold;
+                                       color: #111827;
+                                       font-size: 14px;
+                                       line-height: 1.4">{{ identity_name }}</td>
+                          </tr>
+                          <tr>
+                            <td style="color: #6b7280;
+                                       font-size: 12px;
+                                       line-height: 1.4;
+                                       padding-top: 2px">{{ identity_detail }}</td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td align="center" style="padding: 20px 30px 0 30px;">
+            <table border="0" cellpadding="0" cellspacing="0" style="margin: 0 auto;">
+              <tr>
+                <td style="display: inline-block;
+                           background-color: #eff4ff;
+                           border: 1px solid #dbeafe;
+                           border-radius: 20px;
+                           padding: 6px 12px;
+                           color: #1e2875;
+                           font-size: 12px;
+                           font-weight: 600">{{ badge_text }}</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding: 20px 30px 0 30px;">
+            <table width="100%" border="0" cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="border-top: 1px dashed #e5e7eb;
+                           padding-top: 20px;
+                           color: #4b5563;
+                           font-size: 14px;
+                           line-height: 1.7">
+                  <p style="margin: 0 0 16px 0;">{{ intro_text }}</p>
+                  {% if secondary_intro_text %}<p style="margin: 0;">{{ secondary_intro_text }}</p>{% endif %}
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        {% if cta_url %}
+          <tr>
+            <td align="center" style="padding: 30px 30px;">
+              <table border="0" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center"
+                      style="background-color: #8a8d91;
+                             border-radius: 999px;
+                             padding: 14px 60px">
+                    <a href="{{ cta_url }}"
+                       style="color: #ffffff;
+                              text-decoration: none;
+                              font-weight: bold;
+                              font-size: 14px;
+                              display: inline-block">{{ cta_label }}</a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        {% endif %}
+        {% if copy_text %}
+          <tr>
+            <td style="padding: 0 30px 20px 30px;">
+              <table width="100%" border="0" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="color: #6b7280; font-size: 12px; line-height: 1.5;">
+                    <p style="margin: 0 0 8px 0; color: #4b5563; font-weight: 600;">{{ copy_label }}</p>
+                    <p style="margin: 0;
+                              color: #1e2875;
+                              word-break: break-all;
+                              font-size: 11px">{{ copy_text }}</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        {% endif %}
+        {% if notice_title %}
+          <tr>
+            <td style="padding: 20px 30px;">
+              <table width="100%"
+                     border="0"
+                     cellpadding="0"
+                     cellspacing="0"
+                     style="background-color: #fffbeb;
+                            border: 1px solid #fef3c7;
+                            border-radius: 6px;
+                            padding: 16px">
+                <tr>
+                  <td style="color: #92400e; font-size: 13px; line-height: 1.5;">
+                    <p style="margin: 0; font-weight: 600;">{{ notice_title }}</p>
+                    <p style="margin: 8px 0 0 0; font-size: 12px;">{{ notice_text }}</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        {% endif %}
+        <tr>
+          <td style="padding: 30px;
+                     border-top: 1px solid #e5e7eb;
+                     background-color: #f9fafb;
+                     text-align: center">
+            <p style="margin: 0; color: #6b7280; font-size: 12px; line-height: 1.6;">{{ footer_text }}</p>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>

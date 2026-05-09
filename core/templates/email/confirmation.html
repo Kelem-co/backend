@@ -1,0 +1,15 @@
+{% load i18n %}
+
+{% block subject %}
+  {% blocktrans %}{{ site_name }} - Your account has been successfully created and activated!{% endblocktrans %}
+{% endblock subject %}
+{% block text_body %}
+  {% with full_url=protocol|add:'://'|add:domain|add:'/' %}
+    {% include "email/_text_scaffold.txt" with heading=site_name|add:" - Your account has been successfully created and activated!" intro_text="Your account has been created and is ready to use!" secondary_intro_text="You can use the button below to visit the site." cta_label="Start Exploring" cta_url=full_url copy_label="Site address:" copy_text=full_url notice_title="Account Active" notice_text="Your account is ready to use." footer_text="The "|add:site_name|add:" team" %}
+  {% endwith %}
+{% endblock text_body %}
+{% block html_body %}
+  {% with full_url=protocol|add:'://'|add:domain|add:'/' %}
+    {% include "email/_scaffold.html" with heading=site_name|add:" - Your account has been successfully created and activated!" identity_name=user.get_full_name identity_detail=user.email badge_text="Account Status: Active" intro_text="Your account has been created and is ready to use!" secondary_intro_text="Use the button below to visit the site." cta_label="Start Exploring" cta_url=full_url copy_label="Site address:" copy_text=full_url notice_title="Account Active" notice_text="Your account is fully active and ready to use." footer_text="The "|add:site_name|add:" team" %}
+  {% endwith %}
+{% endblock html_body %}
