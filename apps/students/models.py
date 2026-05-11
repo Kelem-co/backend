@@ -113,9 +113,11 @@ class Student(UUIDModel, TimeStampedModel):
         verbose_name=_("Current Section"),
     )
     admission_date = models.DateField(_("Admission Date"))
-    photo = models.ImageField(
-        _("Photo"),
-        upload_to="students/photos/",
+    photo = models.ForeignKey(
+        "media.MediaFile",
+        verbose_name=_("Photo"),
+        on_delete=models.SET_NULL,
+        related_name="student_photo_files",
         blank=True,
         null=True,
     )

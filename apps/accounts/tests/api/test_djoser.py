@@ -88,5 +88,7 @@ def test_user_signup_rejects_privileged_fields(api_client: APIClient):
     response = api_client.post("/auth/users/", payload, format="json")
 
     assert response.status_code == HTTPStatus.BAD_REQUEST
-    assert "role" in response.data
+    error = response.data["errors"][0]
+    assert error["field"] == "role"
+    assert error["detail"] == "This field may not be set during signup."
     assert not User.objects.filter(email=payload["email"]).exists()

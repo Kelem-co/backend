@@ -32,13 +32,10 @@ class TestUserViewSet:
         assert other_user not in queryset
 
     def test_me(self, user: User, api_rf: APIRequestFactory):
-        view = UserViewSet()
         request = api_rf.get("/fake-url/")
         request.user = user
 
-        view.request = request
-
-        response = view.me(request)  # type: ignore[call-arg, arg-type, misc]
+        response = UserViewSet.as_view({"get": "me"})(request)
 
         assert response.data == {
             "id": str(user.id),

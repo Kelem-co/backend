@@ -5,6 +5,8 @@ from students.models import Parent
 from students.models import ParentStudentLink
 from students.models import Student
 
+from media.api.serializers import MediaFileReferenceField
+
 # Base field list derived from the Student model — kept explicit so
 # StudentReadSerializer can safely extend it without iterating "__all__".
 STUDENT_BASE_FIELDS = [
@@ -43,6 +45,12 @@ PARENT_BASE_FIELDS = [
 
 class StudentSerializer(serializers.ModelSerializer):
     """Write serializer — accepts FK ids for create / update."""
+
+    photo = MediaFileReferenceField(
+        required=False,
+        allow_null=True,
+        content_type_prefix="image/",
+    )
 
     class Meta:
         model = Student

@@ -5,7 +5,11 @@ from schools.models import School
 
 
 class SchoolViewSet(viewsets.ModelViewSet):
-    queryset = School.objects.select_related("organization", "organization__owner")
+    queryset = School.objects.select_related(
+        "organization",
+        "organization__owner",
+        "logo",
+    )
     serializer_class = SchoolSerializer
     permission_classes = [IsAuthenticated]
 

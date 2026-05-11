@@ -1,3 +1,4 @@
+from django.db.models import Prefetch
 from rest_framework import status
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -45,7 +46,15 @@ class TeacherViewSet(viewsets.ModelViewSet):
             "user",
             "branch",
             "organization",
-        ).prefetch_related("qualifications")
+        ).prefetch_related(
+            Prefetch(
+                "qualifications",
+                queryset=TeacherQualification.objects.select_related(
+                    "certificate_copy",
+                    "organization",
+                ),
+            ),
+        )
         if getattr(self, "swagger_fake_view", False):
             return qs.none()
 
@@ -68,7 +77,7 @@ class TeacherViewSet(viewsets.ModelViewSet):
     def qualifications(self, request, pk=None):
         """Return all qualifications for this teacher."""
         teacher = self.get_object()
-        qs = teacher.qualifications.all()
+        qs = teacher.qualifications.select_related("certificate_copy", "organization")
         serializer = TeacherQualificationSerializer(qs, many=True)
         return Response(serializer.data)
 
@@ -104,6 +113,7 @@ class TeacherQualificationViewSet(viewsets.ModelViewSet):
         qs = TeacherQualification.objects.select_related(
             "teacher__user",
             "organization",
+            "certificate_copy",
         )
         if getattr(self, "swagger_fake_view", False):
             return qs.none()

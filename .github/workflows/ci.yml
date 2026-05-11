@@ -36,6 +36,12 @@ jobs:
   # With no caching at all the entire ci process takes 3m to complete!
   pytest:
     runs-on: ubuntu-latest
+    env:
+      S3_PORT: 9000
+      S3_CONSOLE_PORT: 9001
+      S3_ACCESS_KEY_ID: minioadmin
+      S3_SECRET_ACCESS_KEY: minioadmin
+      S3_BUCKET: core-bucket
 
     steps:
       - name: Checkout Code Repository

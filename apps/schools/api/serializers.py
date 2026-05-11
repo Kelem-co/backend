@@ -2,8 +2,16 @@ from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 from schools.models import School
 
+from media.api.serializers import MediaFileReferenceField
+
 
 class SchoolSerializer(serializers.ModelSerializer):
+    logo = MediaFileReferenceField(
+        required=False,
+        allow_null=True,
+        content_type_prefix="image/",
+    )
+
     class Meta:
         model = School
         fields = [

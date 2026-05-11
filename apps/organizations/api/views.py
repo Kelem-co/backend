@@ -10,7 +10,7 @@ from rest_framework.response import Response
 
 
 class OrganizationViewSet(viewsets.ModelViewSet):
-    queryset = Organization.objects.select_related("owner")
+    queryset = Organization.objects.select_related("owner", "business_license_image")
     serializer_class = OrganizationSerializer
     permission_classes = [IsAuthenticated]
 
