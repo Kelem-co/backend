@@ -21,6 +21,7 @@ class Organization(UUIDModel, TimeStampedModel):
     )
     name = models.CharField(_("Name"), max_length=255)
     trade_name = models.CharField(_("Trade Name"), max_length=255, blank=True)
+    tin_number = models.CharField(_("TIN Number"), max_length=20, blank=True)
     license_no = models.CharField(_("License Number"), max_length=100, blank=True)
     client_full_name = models.CharField(_("Client Full Name"), max_length=255)
     business_address = models.TextField(_("Business Address"))
@@ -39,7 +40,7 @@ class Organization(UUIDModel, TimeStampedModel):
         default=Status.PENDING,
     )
 
-    class Meta:
+    class Meta:  # type: ignore
         verbose_name = _("Organization")
         verbose_name_plural = _("Organizations")
 

@@ -36,6 +36,14 @@ services:
     env_file:
       - ./.envs/.local/.postgres
 
+  adminer:
+    image: adminer
+    container_name: core_local_adminer
+    depends_on:
+      - postgres
+    ports:
+      - "8080:8080"
+
   mailpit:
     image: docker.io/axllent/mailpit:latest
     container_name: core_local_mailpit

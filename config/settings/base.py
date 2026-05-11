@@ -84,12 +84,14 @@ THIRD_PARTY_APPS = [
     "rest_framework.authtoken",
     "corsheaders",
     "drf_spectacular",
+    "django_seed",
 ]
 
 LOCAL_APPS = [
     "accounts",
     "organizations",
     "schools",
+    "branches",
     "academics",
     "core",
     # Your stuff: custom apps go here
@@ -314,9 +316,9 @@ CELERY_WORKER_HIJACK_ROOT_LOGGER = False
 # ------------------------------------------------------------------------------
 ACCOUNT_ALLOW_REGISTRATION = env.bool("DJANGO_ACCOUNT_ALLOW_REGISTRATION", True)
 # https://docs.allauth.org/en/latest/account/configuration.html
-ACCOUNT_LOGIN_METHODS = {"username"}
+ACCOUNT_LOGIN_METHODS = {'email'}
 # https://docs.allauth.org/en/latest/account/configuration.html
-ACCOUNT_SIGNUP_FIELDS = ["email*", "username*", "password1*", "password2*"]
+ACCOUNT_SIGNUP_FIELDS = ['email*', 'password1*', 'password2*', ]
 # https://docs.allauth.org/en/latest/account/configuration.html
 ACCOUNT_EMAIL_VERIFICATION = "mandatory"
 # https://docs.allauth.org/en/latest/account/configuration.html
@@ -354,3 +356,17 @@ SPECTACULAR_SETTINGS = {
 }
 # Your stuff...
 # ------------------------------------------------------------------------------
+
+# Monkeypatch django-seed for Django 5.0+ compatibility
+# django-seed uses is_dst which was removed in Django 5.0
+from django.utils import timezone
+import django
+
+if django.VERSION >= (5, 0):
+    original_make_aware = timezone.make_aware
+
+    def patched_make_aware(value, timezone_obj=None, is_dst=None):
+        # Ignore is_dst if provided
+        return original_make_aware(value, timezone_obj)
+
+    timezone.make_aware = patched_make_aware
