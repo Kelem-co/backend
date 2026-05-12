@@ -1,12 +1,19 @@
+from accounts.api.views import UserViewSet
+from branches.api.views import BranchAdminViewSet
+from branches.api.views import BranchViewSet
 from django.conf import settings
+from organizations.api.views import OrganizationViewSet
 from rest_framework.routers import DefaultRouter
 from rest_framework.routers import SimpleRouter
-
-from core.users.api.views import UserViewSet
+from schools.api.views import SchoolViewSet
 
 router = DefaultRouter() if settings.DEBUG else SimpleRouter()
 
 router.register("users", UserViewSet)
+router.register("organizations", OrganizationViewSet)
+router.register("schools", SchoolViewSet)
+router.register("branches", BranchViewSet)
+router.register("branch-admins", BranchAdminViewSet)
 
 
 app_name = "api"

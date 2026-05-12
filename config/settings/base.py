@@ -2,11 +2,14 @@
 """Base settings to build other settings files upon."""
 
 import ssl
+import sys
 from pathlib import Path
 
 import environ
+from django.utils import timezone
 
 BASE_DIR = Path(__file__).resolve(strict=True).parent.parent.parent
+sys.path.append(str(BASE_DIR / "apps"))
 # core/
 APPS_DIR = BASE_DIR / "core"
 env = environ.Env()
@@ -82,10 +85,16 @@ THIRD_PARTY_APPS = [
     "rest_framework.authtoken",
     "corsheaders",
     "drf_spectacular",
+    "django_seed",
 ]
 
 LOCAL_APPS = [
-    "core.users",
+    "accounts",
+    "organizations",
+    "schools",
+    "branches",
+    "academics",
+    "core",
     # Your stuff: custom apps go here
 ]
 # https://docs.djangoproject.com/en/dev/ref/settings/#installed-apps
@@ -104,7 +113,7 @@ AUTHENTICATION_BACKENDS = [
     "allauth.account.auth_backends.AuthenticationBackend",
 ]
 # https://docs.djangoproject.com/en/dev/ref/settings/#auth-user-model
-AUTH_USER_MODEL = "users.User"
+AUTH_USER_MODEL = "accounts.User"
 # https://docs.djangoproject.com/en/dev/ref/settings/#login-redirect-url
 LOGIN_REDIRECT_URL = "users:redirect"
 # https://docs.djangoproject.com/en/dev/ref/settings/#login-url
@@ -189,7 +198,7 @@ TEMPLATES = [
                 "django.template.context_processors.static",
                 "django.template.context_processors.tz",
                 "django.contrib.messages.context_processors.messages",
-                "core.users.context_processors.allauth_settings",
+                "accounts.context_processors.allauth_settings",
             ],
         },
     },
@@ -308,19 +317,19 @@ CELERY_WORKER_HIJACK_ROOT_LOGGER = False
 # ------------------------------------------------------------------------------
 ACCOUNT_ALLOW_REGISTRATION = env.bool("DJANGO_ACCOUNT_ALLOW_REGISTRATION", True)
 # https://docs.allauth.org/en/latest/account/configuration.html
-ACCOUNT_LOGIN_METHODS = {"username"}
+ACCOUNT_LOGIN_METHODS = {"email"}
 # https://docs.allauth.org/en/latest/account/configuration.html
-ACCOUNT_SIGNUP_FIELDS = ["email*", "username*", "password1*", "password2*"]
+ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*", "password2*"]
 # https://docs.allauth.org/en/latest/account/configuration.html
 ACCOUNT_EMAIL_VERIFICATION = "mandatory"
 # https://docs.allauth.org/en/latest/account/configuration.html
-ACCOUNT_ADAPTER = "core.users.adapters.AccountAdapter"
+ACCOUNT_ADAPTER = "accounts.adapters.AccountAdapter"
 # https://docs.allauth.org/en/latest/account/forms.html
-ACCOUNT_FORMS = {"signup": "core.users.forms.UserSignupForm"}
+ACCOUNT_FORMS = {"signup": "accounts.forms.UserSignupForm"}
 # https://docs.allauth.org/en/latest/socialaccount/configuration.html
-SOCIALACCOUNT_ADAPTER = "core.users.adapters.SocialAccountAdapter"
+SOCIALACCOUNT_ADAPTER = "accounts.adapters.SocialAccountAdapter"
 # https://docs.allauth.org/en/latest/socialaccount/configuration.html
-SOCIALACCOUNT_FORMS = {"signup": "core.users.forms.UserSocialSignupForm"}
+SOCIALACCOUNT_FORMS = {"signup": "accounts.forms.UserSocialSignupForm"}
 
 # django-rest-framework
 # -------------------------------------------------------------------------------
@@ -348,3 +357,16 @@ SPECTACULAR_SETTINGS = {
 }
 # Your stuff...
 # ------------------------------------------------------------------------------
+
+# Monkeypatch django-seed for Django 5.0+ compatibility
+# django-seed uses is_dst which was removed in Django 5.0
+
+original_make_aware = timezone.make_aware
+
+
+def patched_make_aware(value, timezone_obj=None, is_dst=None):
+    # Ignore is_dst if provided
+    return original_make_aware(value, timezone_obj)
+
+
+timezone.make_aware = patched_make_aware
