@@ -23,3 +23,15 @@ class UserAdminCreationForm(admin_forms.UserCreationForm):
         error_messages = {
             "email": {"unique": _("This email has already been taken.")},
         }
+
+
+class UserSignupForm(SignupForm):
+    """
+    Form rendered for standard account signup.
+    """
+
+
+class UserSocialSignupForm(SocialSignupForm):
+    """
+    Form rendered for social account signup.
+    """

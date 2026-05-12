@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import pytest
 
-from branches.models import Branch, BranchAdmin
+if TYPE_CHECKING:
+    from branches.models import Branch
+    from branches.models import BranchAdmin
 
 
 @pytest.mark.django_db

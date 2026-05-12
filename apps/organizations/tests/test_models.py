@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-import pytest
+from typing import TYPE_CHECKING
 
-from organizations.models import Organization
+if TYPE_CHECKING:
+    from organizations.models import Organization
 
 
 def test_organization_str(organization: Organization):

@@ -3,12 +3,11 @@ from http import HTTPStatus
 from importlib import reload
 
 import pytest
+from accounts.models import User
 from django.contrib import admin
 from django.contrib.auth.models import AnonymousUser
 from django.urls import reverse
 from pytest_django.asserts import assertRedirects
-
-from accounts.models import User
 
 
 class TestUserAdmin:
@@ -30,16 +29,16 @@ class TestUserAdmin:
         response = admin_client.post(
             url,
             data={
-                "username": "test",
+                "email": "test@example.com",
                 "password1": "My_R@ndom-P@ssw0rd",
                 "password2": "My_R@ndom-P@ssw0rd",
             },
         )
         assert response.status_code == HTTPStatus.FOUND
-        assert User.objects.filter(username="test").exists()
+        assert User.objects.filter(email="test@example.com").exists()
 
     def test_view_user(self, admin_client):
-        user = User.objects.get(username="admin")
+        user = User.objects.filter(is_superuser=True).get()
         url = reverse("admin:accounts_user_change", kwargs={"object_id": user.pk})
         response = admin_client.get(url)
         assert response.status_code == HTTPStatus.OK

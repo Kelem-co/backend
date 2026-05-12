@@ -1,11 +1,14 @@
+from branches.models import Branch
+from branches.models import BranchAdmin
 from django.contrib import admin
-from branches.models import Branch, BranchAdmin
+
 
 @admin.register(Branch)
 class BranchAdminModel(admin.ModelAdmin):
     list_display = ("name", "school", "city", "status")
     search_fields = ("name", "address", "city", "region")
     list_filter = ("status",)
+
 
 @admin.register(BranchAdmin)
 class BranchAdminUserModel(admin.ModelAdmin):

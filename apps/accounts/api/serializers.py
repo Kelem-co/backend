@@ -1,5 +1,5 @@
-from rest_framework import serializers
 from accounts.models import User
+from rest_framework import serializers
 
 
 class UserSerializer(serializers.ModelSerializer[User]):
@@ -21,7 +21,6 @@ class UserSerializer(serializers.ModelSerializer[User]):
             "updated_at",
         ]
         read_only_fields = ["id", "verified_at", "created_at", "updated_at"]
-
 
     def create(self, validated_data):
         password = validated_data.pop("password", None)

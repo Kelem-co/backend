@@ -19,9 +19,30 @@ if settings.DJANGO_ADMIN_FORCE_ALLAUTH:
 class UserAdmin(auth_admin.UserAdmin):
     form = UserAdminChangeForm
     add_form = UserAdminCreationForm
+    add_fieldsets = (
+        (
+            None,
+            {
+                "classes": ("wide",),
+                "fields": ("email", "password1", "password2"),
+            },
+        ),
+    )
     fieldsets = (
         (None, {"fields": ("email", "password")}),
-        (_("Personal info"), {"fields": ("name", "father_name", "grandfather_name", "phone_number", "address", "verified_at")}),
+        (
+            _("Personal info"),
+            {
+                "fields": (
+                    "name",
+                    "father_name",
+                    "grandfather_name",
+                    "phone_number",
+                    "address",
+                    "verified_at",
+                ),
+            },
+        ),
         (
             _("Permissions"),
             {

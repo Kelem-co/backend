@@ -1,9 +1,10 @@
 from http import HTTPStatus
+from typing import TYPE_CHECKING
 
-import pytest
 from django.urls import reverse
 
-from schools.models import School
+if TYPE_CHECKING:
+    from schools.models import School
 
 
 class TestSchoolAdmin:

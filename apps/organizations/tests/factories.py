@@ -1,8 +1,7 @@
 import factory
+from accounts.tests.factories import UserFactory
 from factory import Faker
 from factory.django import DjangoModelFactory
-
-from accounts.tests.factories import UserFactory
 from organizations.models import Organization
 
 

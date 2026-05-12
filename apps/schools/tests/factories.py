@@ -3,7 +3,6 @@ from __future__ import annotations
 import factory
 from factory import Faker
 from factory.django import DjangoModelFactory
-
 from organizations.tests.factories import OrganizationFactory
 from schools.models import School
 

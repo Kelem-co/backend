@@ -1,9 +1,10 @@
 from http import HTTPStatus
+from typing import TYPE_CHECKING
 
-import pytest
 from django.urls import reverse
 
-from organizations.models import Organization
+if TYPE_CHECKING:
+    from organizations.models import Organization
 
 
 class TestOrganizationAdmin:
@@ -23,6 +24,9 @@ class TestOrganizationAdmin:
         assert response.status_code == HTTPStatus.OK
 
     def test_view_organization(self, admin_client, organization: Organization):
-        url = reverse("admin:organizations_organization_change", kwargs={"object_id": organization.pk})
+        url = reverse(
+            "admin:organizations_organization_change",
+            kwargs={"object_id": organization.pk},
+        )
         response = admin_client.get(url)
         assert response.status_code == HTTPStatus.OK

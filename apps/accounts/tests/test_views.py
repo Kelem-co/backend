@@ -4,6 +4,11 @@ from http import HTTPStatus
 from typing import TYPE_CHECKING
 
 import pytest
+from accounts.forms import UserAdminChangeForm
+from accounts.tests.factories import UserFactory
+from accounts.views import UserRedirectView
+from accounts.views import UserUpdateView
+from accounts.views import user_detail_view
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.models import AnonymousUser
@@ -14,16 +19,9 @@ from django.http import HttpResponseRedirect
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
-from accounts.forms import UserAdminChangeForm
-from accounts.tests.factories import UserFactory
-from accounts.views import UserRedirectView
-from accounts.views import UserUpdateView
-from accounts.views import user_detail_view
-
 if TYPE_CHECKING:
-    from django.test import RequestFactory
-
     from accounts.models import User
+    from django.test import RequestFactory
 
 pytestmark = pytest.mark.django_db
 
@@ -46,7 +44,7 @@ class TestUserUpdateView:
         request.user = user
 
         view.request = request
-        assert view.get_success_url() == f"/users/{user.username}/"
+        assert view.get_success_url() == f"/users/{user.pk}/"
 
     def test_get_object(self, user: User, rf: RequestFactory):
         view = UserUpdateView()
@@ -85,21 +83,21 @@ class TestUserRedirectView:
         request.user = user
 
         view.request = request
-        assert view.get_redirect_url() == f"/users/{user.username}/"
+        assert view.get_redirect_url() == f"/users/{user.pk}/"
 
 
 class TestUserDetailView:
     def test_authenticated(self, user: User, rf: RequestFactory):
         request = rf.get("/fake-url/")
         request.user = UserFactory.create()
-        response = user_detail_view(request, username=user.username)
+        response = user_detail_view(request, pk=user.pk)
 
         assert response.status_code == HTTPStatus.OK
 
     def test_not_authenticated(self, user: User, rf: RequestFactory):
         request = rf.get("/fake-url/")
         request.user = AnonymousUser()
-        response = user_detail_view(request, username=user.username)
+        response = user_detail_view(request, pk=user.pk)
         login_url = reverse(settings.LOGIN_URL)
 
         assert isinstance(response, HttpResponseRedirect)

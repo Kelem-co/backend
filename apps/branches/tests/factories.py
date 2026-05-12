@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import factory
+from accounts.tests.factories import UserFactory
+from branches.models import Branch
+from branches.models import BranchAdmin
 from factory import Faker
 from factory.django import DjangoModelFactory
-
-from accounts.tests.factories import UserFactory
 from schools.tests.factories import SchoolFactory
-from branches.models import Branch, BranchAdmin
 
 
 class BranchFactory(DjangoModelFactory[Branch]):

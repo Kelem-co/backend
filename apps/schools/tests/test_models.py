@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import pytest
 
-from schools.models import School
+if TYPE_CHECKING:
+    from schools.models import School
 
 
 @pytest.mark.django_db

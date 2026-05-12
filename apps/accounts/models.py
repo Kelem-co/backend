@@ -1,10 +1,13 @@
-from django.contrib.auth.models import AbstractUser, BaseUserManager
-from django.db import models
-from django.db.models import CharField, DateTimeField, EmailField
+from django.contrib.auth.models import AbstractUser
+from django.contrib.auth.models import BaseUserManager
+from django.db.models import CharField
+from django.db.models import DateTimeField
+from django.db.models import EmailField
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
-from core.models import TimeStampedModel, UUIDModel
+from core.models import TimeStampedModel
+from core.models import UUIDModel
 
 
 class UserManager(BaseUserManager):
@@ -33,20 +36,26 @@ class User(UUIDModel, TimeStampedModel, AbstractUser):
     """
     Default custom user model for core.
     """
-    
+
     username = None
     email = EmailField(_("Email Address"), unique=True)
     name = CharField(_("First Name"), blank=True, max_length=255)
     father_name = CharField(_("Father's Name"), blank=True, max_length=255)
     grandfather_name = CharField(_("Grandfather's Name"), blank=True, max_length=255)
-    phone_number = CharField(_("Phone Number"), null=True, blank=True, unique=True, max_length=20)
+    phone_number = CharField(
+        _("Phone Number"),
+        null=True,
+        blank=True,
+        unique=True,
+        max_length=20,
+    )
     address = CharField(_("Address"), blank=True, max_length=255)
     verified_at = DateTimeField(_("Verified At"), blank=True, null=True)
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ["name"]
 
-    objects = UserManager() # type: ignore[assignment]
+    objects = UserManager()  # type: ignore[assignment]
 
     def get_absolute_url(self) -> str:
         """Get URL for user's detail view.

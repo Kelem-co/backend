@@ -2,10 +2,13 @@ from django.conf import settings
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
-from core.models import TimeStampedModel, UUIDModel
+from core.models import TimeStampedModel
+from core.models import UUIDModel
+
 
 def organization_license_upload_path(instance, filename):
     return f"organizations/{instance.id}/licenses/{filename}"
+
 
 class Organization(UUIDModel, TimeStampedModel):
     class Status(models.TextChoices):
@@ -40,7 +43,7 @@ class Organization(UUIDModel, TimeStampedModel):
         default=Status.PENDING,
     )
 
-    class Meta:  # type: ignore
+    class Meta:
         verbose_name = _("Organization")
         verbose_name_plural = _("Organizations")
 

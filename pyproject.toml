@@ -38,7 +38,6 @@ dependencies = [
   "redis==7.4.0",
   "uvicorn[standard]==0.46.0",
   "uvicorn-worker==0.4.0",
-  "django-seed>=0.3.1",
 ]
 
 [dependency-groups]
@@ -47,6 +46,7 @@ dev = [
   "django-coverage-plugin==3.2.2",
   "django-debug-toolbar==6.3.0",
   "django-extensions==4.1",
+  "django-seed>=0.3.1",
   "django-stubs[compatible-mypy]==6.0.3",
   "djangorestframework-stubs==3.16.9",
   "djlint==1.36.4",
@@ -63,7 +63,6 @@ dev = [
   "sphinx-autobuild==2025.8.25",
   "watchfiles==1.1.1",
   "werkzeug[watchdog]==3.1.8",
-  "django-seed>=0.3.1",
 ]
 
 [tool.ruff]

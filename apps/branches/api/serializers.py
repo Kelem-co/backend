@@ -1,5 +1,8 @@
+from branches.models import Branch
+from branches.models import BranchAdmin
 from rest_framework import serializers
-from branches.models import Branch, BranchAdmin
+from rest_framework.exceptions import ValidationError
+
 
 class BranchSerializer(serializers.ModelSerializer):
     class Meta:
@@ -20,6 +23,41 @@ class BranchSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
 
+    def validate(self, attrs):
+        request = self.context.get("request")
+        organization = attrs.get(
+            "organization",
+            getattr(self.instance, "organization", None),
+        )
+        school = attrs.get("school", getattr(self.instance, "school", None))
+
+        if request is None:
+            return attrs
+
+        if organization is not None and organization.owner_id != request.user.id:
+            raise ValidationError(
+                {"organization": "You can only manage your own organizations."},
+            )
+
+        if school is not None and school.organization.owner_id != request.user.id:
+            raise ValidationError(
+                {"school": "You can only manage schools in your organizations."},
+            )
+
+        if (
+            organization is not None
+            and school is not None
+            and school.organization_id != organization.id
+        ):
+            raise ValidationError(
+                {
+                    "school": "Selected school does not belong to the selected organization.",  # noqa: E501
+                },
+            )
+
+        return attrs
+
+
 class BranchAdminSerializer(serializers.ModelSerializer):
     class Meta:
         model = BranchAdmin
@@ -38,3 +76,37 @@ class BranchAdminSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["id", "created_at", "updated_at", "last_login"]
+
+    def validate(self, attrs):
+        request = self.context.get("request")
+        organization = attrs.get(
+            "organization",
+            getattr(self.instance, "organization", None),
+        )
+        branch = attrs.get("branch", getattr(self.instance, "branch", None))
+
+        if request is None:
+            return attrs
+
+        if organization is not None and organization.owner_id != request.user.id:
+            raise ValidationError(
+                {"organization": "You can only manage your own organizations."},
+            )
+
+        if branch is not None and branch.organization.owner_id != request.user.id:
+            raise ValidationError(
+                {"branch": "You can only manage branches in your organizations."},
+            )
+
+        if (
+            organization is not None
+            and branch is not None
+            and branch.organization_id != organization.id
+        ):
+            raise ValidationError(
+                {
+                    "branch": "Selected branch does not belong to the selected organization.",  # noqa: E501
+                },
+            )
+
+        return attrs

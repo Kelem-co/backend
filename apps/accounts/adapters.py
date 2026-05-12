@@ -7,10 +7,9 @@ from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
 from django.conf import settings
 
 if typing.TYPE_CHECKING:
+    from accounts.models import User
     from allauth.socialaccount.models import SocialLogin
     from django.http import HttpRequest
-
-    from accounts.models import User
 
 
 class AccountAdapter(DefaultAccountAdapter):

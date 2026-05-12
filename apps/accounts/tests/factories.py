@@ -1,14 +1,12 @@
 from __future__ import annotations
 
+from accounts.models import User
 from factory import Faker
 from factory import post_generation
 from factory.django import DjangoModelFactory
 
-from accounts.models import User
-
 
 class UserFactory(DjangoModelFactory[User]):
-    username = Faker("user_name")
     email = Faker("email")
     name = Faker("name")
 
@@ -32,5 +30,5 @@ class UserFactory(DjangoModelFactory[User]):
 
     class Meta:
         model = User
-        django_get_or_create = ["username"]
+        django_get_or_create = ["email"]
         skip_postgeneration_save = True
