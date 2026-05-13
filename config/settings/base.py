@@ -95,6 +95,7 @@ LOCAL_APPS = [
     "branches",
     "academics",
     "students",
+    "teachers",
     "core",
 
     # Your stuff: custom apps go here

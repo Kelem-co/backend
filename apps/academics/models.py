@@ -121,3 +121,39 @@ class Subject(UUIDModel, TimeStampedModel):
 
     def __str__(self):
         return f"{self.grade.name} - {self.name}"
+
+
+class GradeSubject(UUIDModel, TimeStampedModel):
+    """
+    Junction table that records which subjects are offered for a given grade
+    within a branch. This is the canonical source of truth for the curriculum
+    structure; TeacherSubjectAssignment references it indirectly via Subject.
+    """
+
+    organization = models.ForeignKey(
+        "organizations.Organization",
+        on_delete=models.CASCADE,
+        related_name="grade_subjects",
+        verbose_name=_("Organization"),
+    )
+    grade = models.ForeignKey(
+        Grade,
+        on_delete=models.CASCADE,
+        related_name="grade_subjects",
+        verbose_name=_("Grade"),
+    )
+    subject = models.ForeignKey(
+        Subject,
+        on_delete=models.CASCADE,
+        related_name="grade_subjects",
+        verbose_name=_("Subject"),
+    )
+
+    class Meta:
+        verbose_name = _("Grade Subject")
+        verbose_name_plural = _("Grade Subjects")
+        unique_together = ("grade", "subject")
+        ordering = ["grade__level", "subject__name"]
+
+    def __str__(self):
+        return f"{self.grade.name} — {self.subject.name}"
