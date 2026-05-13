@@ -73,12 +73,19 @@ class Section(UUIDModel, TimeStampedModel):
         related_name="sections",
         verbose_name=_("Grade"),
     )
+    academic_year = models.ForeignKey(
+        AcademicYear, 
+        on_delete=models.CASCADE, 
+        related_name="sections",
+        null=True,
+        blank=True,
+    )
     name = models.CharField(_("Name"), max_length=100)
 
     class Meta:
         verbose_name = _("Section")
         verbose_name_plural = _("Sections")
-        unique_together = ("grade", "name")
+        unique_together = ("grade", "name", "academic_year")
         ordering = ["-created_at"]
 
     def __str__(self):

@@ -49,11 +49,16 @@ class Student(UUIDModel, TimeStampedModel):
     class Meta:
         verbose_name = _("Student")
         verbose_name_plural = _("Students")
-        unique_together = ("branch", "roll_no")
+        unique_together = ("branch", "current_section", "roll_no")
         ordering = ["-created_at"]
 
     def __str__(self):
         return f"{self.first_name} {self.last_name} ({self.roll_no})"
+
+    @property
+    def parents(self):
+        """Returns parent users linked to this student."""
+        return [link.parent for link in ParentStudentLink.objects.filter(student=self).select_related("parent")]
 
 class ParentStudentLink(UUIDModel, TimeStampedModel):
     class Relationship(models.TextChoices):
@@ -84,3 +89,4 @@ class ParentStudentLink(UUIDModel, TimeStampedModel):
 
     def __str__(self):
         return f"{self.parent.name} - {self.student.first_name} ({self.relationship_type})"
+

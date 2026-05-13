@@ -7,6 +7,7 @@ class AccountsConfig(AppConfig):
     verbose_name = _("Accounts")
 
     def ready(self):
-        """
-        Override this method in subclasses to run code when Django starts.
-        """
+        try:
+            import accounts.signals  # noqa: F401
+        except ImportError:
+            pass

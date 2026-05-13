@@ -1,3 +1,4 @@
+from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.contrib.auth.models import BaseUserManager
 from django.db.models import CharField
@@ -37,11 +38,23 @@ class User(UUIDModel, TimeStampedModel, AbstractUser):
     Default custom user model for core.
     """
 
+    class Role(models.TextChoices):
+        ORGANIZATION = "ORGANIZATION", _("Organization")
+        BRANCH_ADMIN = "BRANCH_ADMIN", _("Branch Admin")
+        TEACHER = "TEACHER", _("Teacher")
+        PARENT = "PARENT", _("Parent")
+
     username = None
     email = EmailField(_("Email Address"), unique=True)
     name = CharField(_("First Name"), blank=True, max_length=255)
     father_name = CharField(_("Father's Name"), blank=True, max_length=255)
     grandfather_name = CharField(_("Grandfather's Name"), blank=True, max_length=255)
+    role = CharField(
+        _("Role"),
+        max_length=20,
+        choices=Role.choices,
+        blank=True,
+    )
     phone_number = CharField(
         _("Phone Number"),
         null=True,
@@ -65,3 +78,9 @@ class User(UUIDModel, TimeStampedModel, AbstractUser):
 
         """
         return reverse("users:detail", kwargs={"pk": self.pk})
+
+    @property
+    def children(self):
+        """Returns students linked to this user as a parent."""
+        from students.models import ParentStudentLink
+        return [link.student for link in ParentStudentLink.objects.filter(parent=self).select_related("student")]
