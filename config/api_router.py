@@ -11,6 +11,8 @@ from attendance.api.views import (
     AttendanceReasonViewSet,
     AttendanceSummaryViewSet,
 )
+from analytics.api.views import InterventionLogViewSet
+from assessments.api.views import AssessmentViewSet, AssessmentResultViewSet
 from branches.api.views import BranchAdminViewSet, BranchViewSet
 from django.conf import settings
 from organizations.api.views import OrganizationViewSet
@@ -47,6 +49,9 @@ router.register("homeroom-assignments", HomeroomAssignmentViewSet, basename="hom
 router.register("attendance", AttendanceViewSet, basename="attendance")
 router.register("attendance-reasons", AttendanceReasonViewSet, basename="attendance-reason")
 router.register("attendance-summaries", AttendanceSummaryViewSet, basename="attendance-summary")
+router.register("intervention-logs", InterventionLogViewSet, basename="intervention-log")
+router.register("assessments", AssessmentViewSet, basename="assessment")
+router.register("assessment-results", AssessmentResultViewSet, basename="assessment-result")
 
 app_name = "api"
 urlpatterns = router.urls
