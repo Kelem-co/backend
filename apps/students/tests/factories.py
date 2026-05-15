@@ -27,12 +27,12 @@ class StudentFactory(DjangoModelFactory):
 
 class ParentFactory(DjangoModelFactory):
     user = factory.SubFactory(UserFactory, role="PARENT")
-    secondary_phone_number = factory.Faker("phone_number")
+    secondary_phone_number = factory.Faker("numerify", text="##########")
     occupation = factory.Faker("job")
     work_address = factory.Faker("address")
     relationship_notes = ""
     emergency_contact_name = factory.Faker("name")
-    emergency_contact_phone = factory.Faker("phone_number")
+    emergency_contact_phone = factory.Faker("numerify", text="##########")
     is_active = True
 
     class Meta:
