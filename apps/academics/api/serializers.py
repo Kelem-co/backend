@@ -1,5 +1,9 @@
+from academics.models import AcademicYear
+from academics.models import Grade
+from academics.models import GradeSubject
+from academics.models import Section
+from academics.models import Subject
 from rest_framework import serializers
-from academics.models import AcademicYear, Grade, Section, Subject, GradeSubject
 
 
 class AcademicYearSerializer(serializers.ModelSerializer):
@@ -39,6 +43,7 @@ class GradeSubjectSerializer(serializers.ModelSerializer):
 
 class GradeSubjectReadSerializer(GradeSubjectSerializer):
     """Read-only serializer with nested grade and subject details."""
+
     grade_details = GradeSerializer(source="grade", read_only=True)
     subject_details = SubjectSerializer(source="subject", read_only=True)
 

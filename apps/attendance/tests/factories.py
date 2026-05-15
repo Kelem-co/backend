@@ -1,13 +1,16 @@
-import factory
 import uuid
-from factory.django import DjangoModelFactory
 
-from attendance.models import Attendance, AttendanceReason, AttendanceSummary
-from organizations.tests.factories import OrganizationFactory
-from branches.tests.factories import BranchFactory
-from academics.tests.factories import AcademicYearFactory, SectionFactory
-from students.tests.factories import StudentFactory
+import factory
+from academics.tests.factories import AcademicYearFactory
+from academics.tests.factories import SectionFactory
 from accounts.tests.factories import UserFactory
+from attendance.models import Attendance
+from attendance.models import AttendanceReason
+from attendance.models import AttendanceSummary
+from branches.tests.factories import BranchFactory
+from factory.django import DjangoModelFactory
+from organizations.tests.factories import OrganizationFactory
+from students.tests.factories import StudentFactory
 
 
 class AttendanceFactory(DjangoModelFactory):

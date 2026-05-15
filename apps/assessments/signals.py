@@ -1,11 +1,18 @@
+from analytics.models import InterventionLog
+from assessments.models import AssessmentResult
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
-from assessments.models import AssessmentResult
+HIGH_SEVERITY_RATIO_THRESHOLD = 0.50
+MEDIUM_SEVERITY_RATIO_THRESHOLD = 0.80
 
 
 @receiver(post_save, sender=AssessmentResult)
-def check_intervention_threshold(sender, instance: AssessmentResult, created: bool, **kwargs):
+def check_intervention_threshold(
+    sender,
+    instance: AssessmentResult,
+    **kwargs,
+):
     """
     After every AssessmentResult save, check if the student's marks
     fall below the passing threshold. If so, create or update an
@@ -15,30 +22,29 @@ def check_intervention_threshold(sender, instance: AssessmentResult, created: bo
       - Only triggers when obtained_marks is set (i.e., GRADED status).
       - Uses get_or_create so repeated saves don't duplicate logs.
       - Severity scales with how far below passing the student is:
-          < 50 % of passing → HIGH
-          50–79 % of passing → MEDIUM
-          ≥ 80 % of passing → LOW
+          < 50 % of passing -> HIGH
+          50-79 % of passing -> MEDIUM
+          >= 80 % of passing -> LOW
     """
     if not instance.is_below_passing:
         return
-
-    from analytics.models import InterventionLog
 
     assessment = instance.assessment
     obtained = float(instance.obtained_marks)
     passing = float(assessment.passing_marks)
     ratio = obtained / passing  # < 1.0 since is_below_passing is True
 
-    if ratio < 0.50:
+    if ratio < HIGH_SEVERITY_RATIO_THRESHOLD:
         severity = InterventionLog.Severity.HIGH
-    elif ratio < 0.80:
+    elif ratio < MEDIUM_SEVERITY_RATIO_THRESHOLD:
         severity = InterventionLog.Severity.MEDIUM
     else:
         severity = InterventionLog.Severity.LOW
 
     title = (
         f"Low Grade Alert: {instance.student.first_name} {instance.student.last_name} "
-        f"scored {instance.obtained_marks}/{assessment.total_marks} on '{assessment.title}'"
+        f"scored {instance.obtained_marks}/{assessment.total_marks} "
+        f"on '{assessment.title}'"
     )
     description = (
         f"Student obtained {instance.percentage}% "

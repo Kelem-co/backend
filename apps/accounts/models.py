@@ -1,11 +1,13 @@
-from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.contrib.auth.models import BaseUserManager
+from django.db import models
 from django.db.models import CharField
 from django.db.models import DateTimeField
 from django.db.models import EmailField
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
+from students.models import Parent
+from students.models import ParentStudentLink
 
 from core.models import TimeStampedModel
 from core.models import UUIDModel
@@ -82,5 +84,19 @@ class User(UUIDModel, TimeStampedModel, AbstractUser):
     @property
     def children(self):
         """Returns students linked to this user as a parent."""
-        from students.models import ParentStudentLink
-        return [link.student for link in ParentStudentLink.objects.filter(parent=self).select_related("student")]
+        return [
+            link.student
+            for link in ParentStudentLink.objects.filter(
+                parent__user=self,
+            ).select_related(
+                "student",
+            )
+        ]
+
+    @property
+    def parent_memberships(self):
+        """Returns parent profile memberships for this user."""
+        try:
+            return self.parent_profile
+        except Parent.DoesNotExist:
+            return None

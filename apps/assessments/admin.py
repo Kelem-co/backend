@@ -1,13 +1,17 @@
+from assessments.models import Assessment
+from assessments.models import AssessmentResult
 from django.contrib import admin
-from assessments.models import Assessment, AssessmentResult
 
 
 class AssessmentResultInline(admin.TabularInline):
     model = AssessmentResult
     extra = 0
     fields = (
-        "student", "obtained_marks", "submission_status",
-        "parent_confirmed", "feedback",
+        "student",
+        "obtained_marks",
+        "submission_status",
+        "parent_confirmed",
+        "feedback",
     )
     readonly_fields = ("parent_confirmed_by", "parent_confirmed_at")
 
@@ -67,8 +71,11 @@ class AssessmentResultAdmin(admin.ModelAdmin):
         "assessment__title",
     )
     readonly_fields = (
-        "parent_confirmed_by", "parent_confirmed_at",
-        "graded_by", "created_at", "updated_at",
+        "parent_confirmed_by",
+        "parent_confirmed_at",
+        "graded_by",
+        "created_at",
+        "updated_at",
     )
 
     @admin.display(description="Student")

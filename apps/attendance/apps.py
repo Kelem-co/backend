@@ -1,3 +1,5 @@
+from importlib import import_module
+
 from django.apps import AppConfig
 
 
@@ -6,4 +8,4 @@ class AttendanceConfig(AppConfig):
     name = "attendance"
 
     def ready(self):
-        import attendance.signals  # noqa: F401
+        import_module("attendance.signals")

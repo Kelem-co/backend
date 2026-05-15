@@ -1,8 +1,10 @@
+from analytics.models import InterventionLog
 from rest_framework import viewsets
 from rest_framework.filters import SearchFilter
 from rest_framework.permissions import IsAuthenticated
 
-from analytics.models import InterventionLog
+from core.api.access import scope_queryset_for_user
+
 from .serializers import InterventionLogSerializer
 
 
@@ -37,6 +39,14 @@ class InterventionLogViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = InterventionLog.objects.select_related("student", "organization")
+        if getattr(self, "swagger_fake_view", False):
+            return qs.none()
+
+        qs = scope_queryset_for_user(
+            qs,
+            self.request.user,
+            branch_lookup="student__branch",
+        )
         p = self.request.query_params
         if p.get("organization"):
             qs = qs.filter(organization_id=p["organization"])

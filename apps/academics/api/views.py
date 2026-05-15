@@ -1,14 +1,19 @@
+from academics.models import AcademicYear
+from academics.models import Grade
+from academics.models import GradeSubject
+from academics.models import Section
+from academics.models import Subject
 from rest_framework import viewsets
 from rest_framework.filters import SearchFilter
-from academics.models import AcademicYear, Grade, Section, Subject, GradeSubject
-from .serializers import (
-    AcademicYearSerializer,
-    GradeSerializer,
-    SectionSerializer,
-    SubjectSerializer,
-    GradeSubjectSerializer,
-    GradeSubjectReadSerializer,
-)
+
+from core.api.access import scope_queryset_for_user
+
+from .serializers import AcademicYearSerializer
+from .serializers import GradeSerializer
+from .serializers import GradeSubjectReadSerializer
+from .serializers import GradeSubjectSerializer
+from .serializers import SectionSerializer
+from .serializers import SubjectSerializer
 
 
 class AcademicYearViewSet(viewsets.ModelViewSet):
@@ -18,6 +23,12 @@ class AcademicYearViewSet(viewsets.ModelViewSet):
     filter_backends = [SearchFilter]
     search_fields = ["name", "branch__name"]
 
+    def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):
+            return self.queryset.none()
+
+        return scope_queryset_for_user(self.queryset, self.request.user)
+
 
 class GradeViewSet(viewsets.ModelViewSet):
     queryset = Grade.objects.all()
@@ -25,6 +36,12 @@ class GradeViewSet(viewsets.ModelViewSet):
     lookup_field = "id"
     filter_backends = [SearchFilter]
     search_fields = ["name"]
+
+    def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):
+            return self.queryset.none()
+
+        return scope_queryset_for_user(self.queryset, self.request.user)
 
 
 class SectionViewSet(viewsets.ModelViewSet):
@@ -34,6 +51,12 @@ class SectionViewSet(viewsets.ModelViewSet):
     filter_backends = [SearchFilter]
     search_fields = ["name", "grade__name", "branch__name"]
 
+    def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):
+            return self.queryset.none()
+
+        return scope_queryset_for_user(self.queryset, self.request.user)
+
 
 class SubjectViewSet(viewsets.ModelViewSet):
     queryset = Subject.objects.select_related("grade", "branch").all()
@@ -42,6 +65,12 @@ class SubjectViewSet(viewsets.ModelViewSet):
     filter_backends = [SearchFilter]
     search_fields = ["name", "code", "grade__name"]
 
+    def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):
+            return self.queryset.none()
+
+        return scope_queryset_for_user(self.queryset, self.request.user)
+
 
 class GradeSubjectViewSet(viewsets.ModelViewSet):
     """
@@ -49,13 +78,20 @@ class GradeSubjectViewSet(viewsets.ModelViewSet):
     Supports filtering by ?grade=<id> and ?subject=<id> via query params,
     and text search via ?search=.
     """
+
     lookup_field = "id"
     filter_backends = [SearchFilter]
     search_fields = ["grade__name", "subject__name", "subject__code"]
 
     def get_queryset(self):
-        qs = GradeSubject.objects.select_related(
-            "grade", "subject", "organization"
+        qs = GradeSubject.objects.select_related("grade", "subject", "organization")
+        if getattr(self, "swagger_fake_view", False):
+            return qs.none()
+
+        qs = scope_queryset_for_user(
+            qs,
+            self.request.user,
+            branch_lookup="grade__branch",
         )
         grade_id = self.request.query_params.get("grade")
         subject_id = self.request.query_params.get("subject")

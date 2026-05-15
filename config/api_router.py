@@ -1,31 +1,29 @@
+from academics.api.views import AcademicYearViewSet
+from academics.api.views import GradeSubjectViewSet
+from academics.api.views import GradeViewSet
+from academics.api.views import SectionViewSet
+from academics.api.views import SubjectViewSet
 from accounts.api.views import UserViewSet
-from academics.api.views import (
-    AcademicYearViewSet,
-    GradeViewSet,
-    GradeSubjectViewSet,
-    SectionViewSet,
-    SubjectViewSet,
-)
-from attendance.api.views import (
-    AttendanceViewSet,
-    AttendanceReasonViewSet,
-    AttendanceSummaryViewSet,
-)
 from analytics.api.views import InterventionLogViewSet
-from assessments.api.views import AssessmentViewSet, AssessmentResultViewSet
-from branches.api.views import BranchAdminViewSet, BranchViewSet
+from assessments.api.views import AssessmentResultViewSet
+from assessments.api.views import AssessmentViewSet
+from attendance.api.views import AttendanceReasonViewSet
+from attendance.api.views import AttendanceSummaryViewSet
+from attendance.api.views import AttendanceViewSet
+from branches.api.views import BranchAdminViewSet
+from branches.api.views import BranchViewSet
 from django.conf import settings
 from organizations.api.views import OrganizationViewSet
 from rest_framework.routers import DefaultRouter
 from rest_framework.routers import SimpleRouter
 from schools.api.views import SchoolViewSet
-from students.api.views import StudentViewSet, ParentStudentLinkViewSet
-from teachers.api.views import (
-    TeacherViewSet,
-    TeacherQualificationViewSet,
-    TeacherSubjectAssignmentViewSet,
-    HomeroomAssignmentViewSet,
-)
+from students.api.views import ParentStudentLinkViewSet
+from students.api.views import ParentViewSet
+from students.api.views import StudentViewSet
+from teachers.api.views import HomeroomAssignmentViewSet
+from teachers.api.views import TeacherQualificationViewSet
+from teachers.api.views import TeacherSubjectAssignmentViewSet
+from teachers.api.views import TeacherViewSet
 
 router = DefaultRouter() if settings.DEBUG else SimpleRouter()
 
@@ -41,17 +39,46 @@ router.register("grade-subjects", GradeSubjectViewSet, basename="grade-subject")
 router.register("sections", SectionViewSet)
 router.register("subjects", SubjectViewSet)
 router.register("students", StudentViewSet, basename="student")
+router.register("parents", ParentViewSet, basename="parent")
 router.register("parent-links", ParentStudentLinkViewSet, basename="parent-link")
 router.register("teachers", TeacherViewSet, basename="teacher")
-router.register("teacher-qualifications", TeacherQualificationViewSet, basename="teacher-qualification")
-router.register("teacher-assignments", TeacherSubjectAssignmentViewSet, basename="teacher-assignment")
-router.register("homeroom-assignments", HomeroomAssignmentViewSet, basename="homeroom-assignment")
+router.register(
+    "teacher-qualifications",
+    TeacherQualificationViewSet,
+    basename="teacher-qualification",
+)
+router.register(
+    "teacher-assignments",
+    TeacherSubjectAssignmentViewSet,
+    basename="teacher-assignment",
+)
+router.register(
+    "homeroom-assignments",
+    HomeroomAssignmentViewSet,
+    basename="homeroom-assignment",
+)
 router.register("attendance", AttendanceViewSet, basename="attendance")
-router.register("attendance-reasons", AttendanceReasonViewSet, basename="attendance-reason")
-router.register("attendance-summaries", AttendanceSummaryViewSet, basename="attendance-summary")
-router.register("intervention-logs", InterventionLogViewSet, basename="intervention-log")
+router.register(
+    "attendance-reasons",
+    AttendanceReasonViewSet,
+    basename="attendance-reason",
+)
+router.register(
+    "attendance-summaries",
+    AttendanceSummaryViewSet,
+    basename="attendance-summary",
+)
+router.register(
+    "intervention-logs",
+    InterventionLogViewSet,
+    basename="intervention-log",
+)
 router.register("assessments", AssessmentViewSet, basename="assessment")
-router.register("assessment-results", AssessmentResultViewSet, basename="assessment-result")
+router.register(
+    "assessment-results",
+    AssessmentResultViewSet,
+    basename="assessment-result",
+)
 
 app_name = "api"
 urlpatterns = router.urls

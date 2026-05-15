@@ -1,18 +1,22 @@
-from rest_framework import viewsets, status
+from rest_framework import status
+from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.filters import SearchFilter
 from rest_framework.response import Response
+from teachers.models import HomeroomAssignment
+from teachers.models import Teacher
+from teachers.models import TeacherQualification
+from teachers.models import TeacherSubjectAssignment
 
-from teachers.models import Teacher, TeacherQualification, TeacherSubjectAssignment, HomeroomAssignment
-from .serializers import (
-    TeacherSerializer,
-    TeacherQualificationSerializer,
-    TeacherSubjectAssignmentSerializer,
-    TeacherSubjectAssignmentReadSerializer,
-    SectionTeacherScheduleSerializer,
-    HomeroomAssignmentSerializer,
-    HomeroomAssignmentReadSerializer,
-)
+from core.api.access import scope_queryset_for_user
+
+from .serializers import HomeroomAssignmentReadSerializer
+from .serializers import HomeroomAssignmentSerializer
+from .serializers import SectionTeacherScheduleSerializer
+from .serializers import TeacherQualificationSerializer
+from .serializers import TeacherSerializer
+from .serializers import TeacherSubjectAssignmentReadSerializer
+from .serializers import TeacherSubjectAssignmentSerializer
 
 
 class TeacherViewSet(viewsets.ModelViewSet):
@@ -23,8 +27,8 @@ class TeacherViewSet(viewsets.ModelViewSet):
     Filter: ?organization=<id>, ?branch=<id>
 
     Custom actions:
-      GET /teachers/<id>/qualifications/  – list qualifications for a teacher
-      GET /teachers/<id>/assignments/     – list subject assignments for a teacher
+      GET /teachers/<id>/qualifications/  - list qualifications for a teacher
+      GET /teachers/<id>/assignments/     - list subject assignments for a teacher
     """
 
     lookup_field = "id"
@@ -38,9 +42,14 @@ class TeacherViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = Teacher.objects.select_related(
-            "user", "branch", "organization"
+            "user",
+            "branch",
+            "organization",
         ).prefetch_related("qualifications")
+        if getattr(self, "swagger_fake_view", False):
+            return qs.none()
 
+        qs = scope_queryset_for_user(qs, self.request.user)
         org = self.request.query_params.get("organization")
         branch = self.request.query_params.get("branch")
         if org:
@@ -56,7 +65,7 @@ class TeacherViewSet(viewsets.ModelViewSet):
     # /teachers/<id>/qualifications/
     # ------------------------------------------------------------------
     @action(detail=True, methods=["get"], url_path="qualifications")
-    def qualifications(self, request, id=None):
+    def qualifications(self, request, pk=None):
         """Return all qualifications for this teacher."""
         teacher = self.get_object()
         qs = teacher.qualifications.all()
@@ -67,11 +76,13 @@ class TeacherViewSet(viewsets.ModelViewSet):
     # /teachers/<id>/assignments/
     # ------------------------------------------------------------------
     @action(detail=True, methods=["get"], url_path="assignments")
-    def assignments(self, request, id=None):
+    def assignments(self, request, pk=None):
         """Return all subject assignments for this teacher."""
         teacher = self.get_object()
         qs = teacher.subject_assignments.select_related(
-            "subject", "section", "academic_year"
+            "subject",
+            "section",
+            "academic_year",
         ).all()
         serializer = TeacherSubjectAssignmentReadSerializer(qs, many=True)
         return Response(serializer.data)
@@ -90,7 +101,18 @@ class TeacherQualificationViewSet(viewsets.ModelViewSet):
     search_fields = ["degree_name", "institution", "field_of_study"]
 
     def get_queryset(self):
-        qs = TeacherQualification.objects.select_related("teacher__user", "organization")
+        qs = TeacherQualification.objects.select_related(
+            "teacher__user",
+            "organization",
+        )
+        if getattr(self, "swagger_fake_view", False):
+            return qs.none()
+
+        qs = scope_queryset_for_user(
+            qs,
+            self.request.user,
+            branch_lookup="teacher__branch",
+        )
         teacher_id = self.request.query_params.get("teacher")
         org = self.request.query_params.get("organization")
         if teacher_id:
@@ -135,6 +157,14 @@ class TeacherSubjectAssignmentViewSet(viewsets.ModelViewSet):
             "section",
             "academic_year",
             "organization",
+        )
+        if getattr(self, "swagger_fake_view", False):
+            return qs.none()
+
+        qs = scope_queryset_for_user(
+            qs,
+            self.request.user,
+            branch_lookup="section__branch",
         )
         filters = {}
         for param in ("teacher", "subject", "section", "academic_year", "organization"):
@@ -255,6 +285,10 @@ class HomeroomAssignmentViewSet(viewsets.ModelViewSet):
             "branch",
             "organization",
         )
+        if getattr(self, "swagger_fake_view", False):
+            return qs.none()
+
+        qs = scope_queryset_for_user(qs, self.request.user)
         filters = {}
         for param in ("organization", "branch", "academic_year", "section", "teacher"):
             val = self.request.query_params.get(param)

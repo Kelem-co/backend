@@ -1,12 +1,16 @@
-from rest_framework import serializers
 from analytics.models import InterventionLog
+from rest_framework import serializers
 
 
 class InterventionLogSerializer(serializers.ModelSerializer):
     intervention_type_display = serializers.CharField(
-        source="get_intervention_type_display", read_only=True
+        source="get_intervention_type_display",
+        read_only=True,
     )
-    severity_display = serializers.CharField(source="get_severity_display", read_only=True)
+    severity_display = serializers.CharField(
+        source="get_severity_display",
+        read_only=True,
+    )
     status_display = serializers.CharField(source="get_status_display", read_only=True)
     student_name = serializers.SerializerMethodField()
 

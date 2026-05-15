@@ -4,7 +4,8 @@ from django.conf import settings
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
-from core.models import TimeStampedModel, UUIDModel
+from core.models import TimeStampedModel
+from core.models import UUIDModel
 
 
 class Attendance(UUIDModel, TimeStampedModel):
@@ -81,7 +82,7 @@ class Attendance(UUIDModel, TimeStampedModel):
         help_text=_(
             "UUID generated on the client for idempotent offline sync. "
             "If a record with this ID already exists, the server will "
-            "return the existing record instead of creating a duplicate."
+            "return the existing record instead of creating a duplicate.",
         ),
     )
 
@@ -159,7 +160,9 @@ class AttendanceReason(UUIDModel, TimeStampedModel):
     parent_confirmed = models.BooleanField(
         _("Parent Confirmed"),
         default=False,
-        help_text=_("Set to True once the parent has acknowledged and explained the absence."),
+        help_text=_(
+            "Set to True once the parent has acknowledged and explained the absence.",
+        ),
     )
     confirmed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,

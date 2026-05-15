@@ -1,7 +1,8 @@
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
-from core.models import TimeStampedModel, UUIDModel
+from core.models import TimeStampedModel
+from core.models import UUIDModel
 
 
 class InterventionLog(UUIDModel, TimeStampedModel):

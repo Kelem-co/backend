@@ -30,6 +30,25 @@ class TestBranchViewSet:
         assert list(queryset) == [owned_branch]
         assert foreign_branch not in queryset
 
+    def test_get_queryset_includes_branch_admin_branch(
+        self,
+        api_rf: APIRequestFactory,
+    ):
+        user = UserFactory()
+        branch = BranchFactory()
+        BranchAdminFactory(user=user, branch=branch)
+        foreign_branch = BranchFactory()
+        view = BranchViewSet()
+        request = api_rf.get("/fake-url/")
+        request.user = user
+
+        view.request = request
+
+        queryset = view.get_queryset()
+
+        assert list(queryset) == [branch]
+        assert foreign_branch not in queryset
+
 
 @pytest.mark.django_db
 class TestBranchAdminViewSet:
@@ -42,7 +61,9 @@ class TestBranchAdminViewSet:
         owned_branch_admin = BranchAdminFactory(
             branch__school__organization__owner=user,
         )
-        foreign_branch_admin = BranchAdminFactory()
+        foreign_branch_admin = BranchAdminFactory(
+            branch__school__organization__owner=UserFactory(),
+        )
         view = BranchAdminViewSet()
         request = api_rf.get("/fake-url/")
         request.user = user
@@ -52,4 +73,23 @@ class TestBranchAdminViewSet:
         queryset = view.get_queryset()
 
         assert list(queryset) == [owned_branch_admin]
+        assert foreign_branch_admin not in queryset
+
+    def test_get_queryset_includes_same_branch_admins(
+        self,
+        api_rf: APIRequestFactory,
+    ):
+        user = UserFactory()
+        branch_admin = BranchAdminFactory(user=user)
+        same_branch_admin = BranchAdminFactory(branch=branch_admin.branch)
+        foreign_branch_admin = BranchAdminFactory()
+        view = BranchAdminViewSet()
+        request = api_rf.get("/fake-url/")
+        request.user = user
+
+        view.request = request
+
+        queryset = view.get_queryset()
+
+        assert set(queryset) == {branch_admin, same_branch_admin}
         assert foreign_branch_admin not in queryset

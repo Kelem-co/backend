@@ -1,6 +1,9 @@
 from django.db import models
 from django.utils.translation import gettext_lazy as _
-from core.models import TimeStampedModel, UUIDModel
+
+from core.models import TimeStampedModel
+from core.models import UUIDModel
+
 
 class AcademicYear(UUIDModel, TimeStampedModel):
     organization = models.ForeignKey(
@@ -29,6 +32,7 @@ class AcademicYear(UUIDModel, TimeStampedModel):
     def __str__(self):
         return f"{self.branch.name} - {self.name}"
 
+
 class Grade(UUIDModel, TimeStampedModel):
     organization = models.ForeignKey(
         "organizations.Organization",
@@ -54,6 +58,7 @@ class Grade(UUIDModel, TimeStampedModel):
     def __str__(self):
         return f"{self.branch.name} - {self.name}"
 
+
 class Section(UUIDModel, TimeStampedModel):
     organization = models.ForeignKey(
         "organizations.Organization",
@@ -74,8 +79,8 @@ class Section(UUIDModel, TimeStampedModel):
         verbose_name=_("Grade"),
     )
     academic_year = models.ForeignKey(
-        AcademicYear, 
-        on_delete=models.CASCADE, 
+        AcademicYear,
+        on_delete=models.CASCADE,
         related_name="sections",
         null=True,
         blank=True,
@@ -90,6 +95,7 @@ class Section(UUIDModel, TimeStampedModel):
 
     def __str__(self):
         return f"{self.grade.name} - {self.name}"
+
 
 class Subject(UUIDModel, TimeStampedModel):
     organization = models.ForeignKey(

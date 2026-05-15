@@ -1,11 +1,12 @@
+from attendance.models import Attendance
+from attendance.tasks import notify_parent_of_absence
+from attendance.tasks import refresh_attendance_summary
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
-from attendance.models import Attendance
-
 
 @receiver(post_save, sender=Attendance)
-def on_attendance_saved(sender, instance: Attendance, created: bool, **kwargs):
+def on_attendance_saved(sender, instance: Attendance, **kwargs):
     """
     After every Attendance save:
       1. Fire a parent notification if the student is ABSENT or LATE.
@@ -13,7 +14,6 @@ def on_attendance_saved(sender, instance: Attendance, created: bool, **kwargs):
 
     Tasks are queued asynchronously so the HTTP response is never delayed.
     """
-    from attendance.tasks import notify_parent_of_absence, refresh_attendance_summary
 
     # Only notify on relevant statuses
     if instance.status in (

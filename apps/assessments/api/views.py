@@ -1,26 +1,31 @@
-import uuid
-
-from django.db import transaction, IntegrityError
-from rest_framework import status, viewsets
+from assessments.models import Assessment
+from assessments.models import AssessmentResult
+from django.db import IntegrityError
+from django.db import transaction
+from django.db.models import Q
+from rest_framework import status
+from rest_framework import viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.filters import SearchFilter
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from assessments.models import Assessment, AssessmentResult
-from .serializers import (
-    AssessmentSerializer,
-    AssessmentReadSerializer,
-    AssessmentResultSerializer,
-    AssessmentResultReadSerializer,
-    BulkGradeSerializer,
-    ParentHomeworkConfirmSerializer,
-)
+from core.api.access import scope_queryset_for_user
+from core.api.access import user_can_access_student_as_parent_or_staff
+from core.api.access import user_resource_access_filter
 
+from .serializers import AssessmentReadSerializer
+from .serializers import AssessmentResultReadSerializer
+from .serializers import AssessmentResultSerializer
+from .serializers import AssessmentSerializer
+from .serializers import BulkGradeSerializer
+from .serializers import ParentHomeworkConfirmSerializer
 
 # ---------------------------------------------------------------------------
 # Assessment ViewSet
 # ---------------------------------------------------------------------------
+
 
 class AssessmentViewSet(viewsets.ModelViewSet):
     """
@@ -64,6 +69,10 @@ class AssessmentViewSet(viewsets.ModelViewSet):
             "branch",
             "organization",
         )
+        if getattr(self, "swagger_fake_view", False):
+            return qs.none()
+
+        qs = scope_queryset_for_user(qs, self.request.user)
         p = self.request.query_params
         if p.get("organization"):
             qs = qs.filter(organization_id=p["organization"])
@@ -121,6 +130,7 @@ class AssessmentViewSet(viewsets.ModelViewSet):
 # AssessmentResult ViewSet
 # ---------------------------------------------------------------------------
 
+
 class AssessmentResultViewSet(viewsets.ModelViewSet):
     """
     CRUD for individual Assessment Results.
@@ -169,6 +179,23 @@ class AssessmentResultViewSet(viewsets.ModelViewSet):
             "graded_by",
             "organization",
         )
+        if getattr(self, "swagger_fake_view", False):
+            return qs.none()
+
+        if self.action == "confirm_homework":
+            qs = qs.filter(
+                user_resource_access_filter(
+                    self.request.user,
+                    branch_lookup="assessment__branch",
+                )
+                | Q(student__parent_links__parent__user=self.request.user),
+            ).distinct()
+        else:
+            qs = scope_queryset_for_user(
+                qs,
+                self.request.user,
+                branch_lookup="assessment__branch",
+            )
         p = self.request.query_params
         if p.get("organization"):
             qs = qs.filter(organization_id=p["organization"])
@@ -242,7 +269,9 @@ class AssessmentResultViewSet(viewsets.ModelViewSet):
                     else:
                         updated_ids.append(str(obj.id))
                 except IntegrityError as exc:
-                    errors.append({"student": str(item["student"].id), "error": str(exc)})
+                    errors.append(
+                        {"student": str(item["student"].id), "error": str(exc)},
+                    )
 
         return Response(
             {
@@ -258,7 +287,7 @@ class AssessmentResultViewSet(viewsets.ModelViewSet):
     # PATCH /assessment-results/<id>/confirm-homework/
     # ------------------------------------------------------------------
     @action(detail=True, methods=["patch"], url_path="confirm-homework")
-    def confirm_homework(self, request, id=None):
+    def confirm_homework(self, request, pk=None):
         """
         Parent endpoint to confirm their child completed a homework task.
 
@@ -270,6 +299,9 @@ class AssessmentResultViewSet(viewsets.ModelViewSet):
               linked parents (check students.ParentStudentLink).
         """
         result = self.get_object()
+        if not user_can_access_student_as_parent_or_staff(request.user, result.student):
+            message = "You cannot confirm this homework result."
+            raise PermissionDenied(message)
 
         if result.parent_confirmed:
             return Response(
@@ -278,7 +310,10 @@ class AssessmentResultViewSet(viewsets.ModelViewSet):
             )
 
         serializer = ParentHomeworkConfirmSerializer(
-            result, data=request.data, partial=True, context={"request": request}
+            result,
+            data=request.data,
+            partial=True,
+            context={"request": request},
         )
         serializer.is_valid(raise_exception=True)
         serializer.save()

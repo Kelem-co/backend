@@ -3,7 +3,8 @@ from django.core.validators import MinValueValidator
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
-from core.models import TimeStampedModel, UUIDModel
+from core.models import TimeStampedModel
+from core.models import UUIDModel
 
 
 class Assessment(UUIDModel, TimeStampedModel):
@@ -49,7 +50,7 @@ class Assessment(UUIDModel, TimeStampedModel):
         verbose_name=_("Teacher-Subject Assignment"),
         help_text=_(
             "Links this assessment to a specific Teacher, Subject, Section, "
-            "and Academic Year — all derived from this single FK."
+            "and Academic Year — all derived from this single FK.",
         ),
     )
 
@@ -75,7 +76,7 @@ class Assessment(UUIDModel, TimeStampedModel):
         blank=True,
         help_text=_(
             "Optional. If set, results below this value trigger an "
-            "Intervention Required log in the analytics app."
+            "Intervention Required log in the analytics app.",
         ),
     )
     due_date = models.DateField(_("Due Date"), null=True, blank=True)
@@ -96,7 +97,10 @@ class Assessment(UUIDModel, TimeStampedModel):
         ]
 
     def __str__(self):
-        return f"{self.get_task_type_display()}: {self.title} ({self.teacher_assignment.section.name})"
+        return (
+            f"{self.get_task_type_display()}: {self.title} "
+            f"({self.teacher_assignment.section.name})"
+        )
 
     @property
     def section(self):
@@ -181,7 +185,7 @@ class AssessmentResult(UUIDModel, TimeStampedModel):
         default=False,
         help_text=_(
             "Set to True by the parent to confirm their child completed "
-            "the homework. Relevant only when task_type=HOMEWORK."
+            "the homework. Relevant only when task_type=HOMEWORK.",
         ),
     )
     parent_confirmed_by = models.ForeignKey(
@@ -193,7 +197,9 @@ class AssessmentResult(UUIDModel, TimeStampedModel):
         verbose_name=_("Confirmed By Parent"),
     )
     parent_confirmed_at = models.DateTimeField(
-        _("Parent Confirmed At"), null=True, blank=True
+        _("Parent Confirmed At"),
+        null=True,
+        blank=True,
     )
 
     class Meta:
@@ -208,17 +214,26 @@ class AssessmentResult(UUIDModel, TimeStampedModel):
 
     def __str__(self):
         marks = self.obtained_marks if self.obtained_marks is not None else "N/A"
-        return f"{self.student} | {self.assessment.title} | {marks}/{self.assessment.total_marks}"
+        return (
+            f"{self.student} | {self.assessment.title} | "
+            f"{marks}/{self.assessment.total_marks}"
+        )
 
     @property
     def percentage(self):
         if self.obtained_marks is None:
             return None
-        return round(float(self.obtained_marks) / float(self.assessment.total_marks) * 100, 2)
+        return round(
+            float(self.obtained_marks) / float(self.assessment.total_marks) * 100,
+            2,
+        )
 
     @property
     def is_below_passing(self):
-        """True when the result is graded and below the assessment's passing_marks threshold."""
+        """
+        True when the result is graded and below the assessment's
+        passing_marks threshold.
+        """
         pm = self.assessment.passing_marks
         if self.obtained_marks is None or pm is None:
             return False

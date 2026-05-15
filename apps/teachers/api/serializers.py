@@ -1,11 +1,13 @@
 from rest_framework import serializers
-
-from teachers.models import Teacher, TeacherQualification, TeacherSubjectAssignment, HomeroomAssignment
-
+from teachers.models import HomeroomAssignment
+from teachers.models import Teacher
+from teachers.models import TeacherQualification
+from teachers.models import TeacherSubjectAssignment
 
 # ---------------------------------------------------------------------------
 # Qualification
 # ---------------------------------------------------------------------------
+
 
 class TeacherQualificationSerializer(serializers.ModelSerializer):
     class Meta:
@@ -28,6 +30,7 @@ class TeacherQualificationSerializer(serializers.ModelSerializer):
 # ---------------------------------------------------------------------------
 # Teacher
 # ---------------------------------------------------------------------------
+
 
 class TeacherSerializer(serializers.ModelSerializer):
     """Write serializer (used for create / update)."""
@@ -60,6 +63,7 @@ class TeacherSerializer(serializers.ModelSerializer):
 # TeacherSubjectAssignment
 # ---------------------------------------------------------------------------
 
+
 class TeacherSubjectAssignmentSerializer(serializers.ModelSerializer):
     """Write serializer (FK ids only)."""
 
@@ -82,15 +86,22 @@ class TeacherSubjectAssignmentReadSerializer(TeacherSubjectAssignmentSerializer)
     """Read serializer with expanded nested details."""
 
     teacher_name = serializers.CharField(source="teacher.user.name", read_only=True)
-    teacher_employee_id = serializers.CharField(source="teacher.employee_id", read_only=True)
+    teacher_employee_id = serializers.CharField(
+        source="teacher.employee_id",
+        read_only=True,
+    )
     subject_name = serializers.CharField(source="subject.name", read_only=True)
     subject_code = serializers.CharField(source="subject.code", read_only=True)
     section_name = serializers.CharField(source="section.name", read_only=True)
     grade_name = serializers.CharField(source="subject.grade.name", read_only=True)
-    academic_year_name = serializers.CharField(source="academic_year.name", read_only=True)
+    academic_year_name = serializers.CharField(
+        source="academic_year.name",
+        read_only=True,
+    )
 
     class Meta(TeacherSubjectAssignmentSerializer.Meta):
-        fields = TeacherSubjectAssignmentSerializer.Meta.fields + [
+        fields = [
+            *TeacherSubjectAssignmentSerializer.Meta.fields,
             "teacher_name",
             "teacher_employee_id",
             "subject_name",
@@ -105,6 +116,7 @@ class TeacherSubjectAssignmentReadSerializer(TeacherSubjectAssignmentSerializer)
 # Custom: section schedule response shape
 # ---------------------------------------------------------------------------
 
+
 class SectionTeacherScheduleSerializer(serializers.ModelSerializer):
     """
     Purpose-built read serializer for the by-section endpoint.
@@ -116,11 +128,20 @@ class SectionTeacherScheduleSerializer(serializers.ModelSerializer):
     subject_code = serializers.CharField(source="subject.code", read_only=True)
     grade_name = serializers.CharField(source="subject.grade.name", read_only=True)
     section_name = serializers.CharField(source="section.name", read_only=True)
-    academic_year_name = serializers.CharField(source="academic_year.name", read_only=True)
+    academic_year_name = serializers.CharField(
+        source="academic_year.name",
+        read_only=True,
+    )
     teacher_id = serializers.UUIDField(source="teacher.id", read_only=True)
     teacher_name = serializers.CharField(source="teacher.user.name", read_only=True)
-    teacher_employee_id = serializers.CharField(source="teacher.employee_id", read_only=True)
-    teacher_specialization = serializers.CharField(source="teacher.specialization", read_only=True)
+    teacher_employee_id = serializers.CharField(
+        source="teacher.employee_id",
+        read_only=True,
+    )
+    teacher_specialization = serializers.CharField(
+        source="teacher.specialization",
+        read_only=True,
+    )
 
     class Meta:
         model = TeacherSubjectAssignment
@@ -142,6 +163,7 @@ class SectionTeacherScheduleSerializer(serializers.ModelSerializer):
 # ---------------------------------------------------------------------------
 # Homeroom Assignment
 # ---------------------------------------------------------------------------
+
 
 class HomeroomAssignmentSerializer(serializers.ModelSerializer):
     """Write serializer — accepts FK ids for create / update."""
@@ -172,9 +194,18 @@ class HomeroomAssignmentReadSerializer(HomeroomAssignmentSerializer):
     teacher_id = serializers.UUIDField(source="teacher.id", read_only=True)
     teacher_name = serializers.CharField(source="teacher.user.name", read_only=True)
     teacher_email = serializers.EmailField(source="teacher.user.email", read_only=True)
-    teacher_phone = serializers.CharField(source="teacher.user.phone_number", read_only=True)
-    teacher_employee_id = serializers.CharField(source="teacher.employee_id", read_only=True)
-    teacher_specialization = serializers.CharField(source="teacher.specialization", read_only=True)
+    teacher_phone = serializers.CharField(
+        source="teacher.user.phone_number",
+        read_only=True,
+    )
+    teacher_employee_id = serializers.CharField(
+        source="teacher.employee_id",
+        read_only=True,
+    )
+    teacher_specialization = serializers.CharField(
+        source="teacher.specialization",
+        read_only=True,
+    )
     teacher_branch = serializers.CharField(source="teacher.branch.name", read_only=True)
 
     # Section details
@@ -182,16 +213,29 @@ class HomeroomAssignmentReadSerializer(HomeroomAssignmentSerializer):
     grade_name = serializers.CharField(source="section.grade.name", read_only=True)
 
     # Academic year details
-    academic_year_name = serializers.CharField(source="academic_year.name", read_only=True)
-    academic_year_start = serializers.DateField(source="academic_year.start_date", read_only=True)
-    academic_year_end = serializers.DateField(source="academic_year.end_date", read_only=True)
+    academic_year_name = serializers.CharField(
+        source="academic_year.name",
+        read_only=True,
+    )
+    academic_year_start = serializers.DateField(
+        source="academic_year.start_date",
+        read_only=True,
+    )
+    academic_year_end = serializers.DateField(
+        source="academic_year.end_date",
+        read_only=True,
+    )
 
     # Branch & org names
     branch_name = serializers.CharField(source="branch.name", read_only=True)
-    organization_name = serializers.CharField(source="organization.name", read_only=True)
+    organization_name = serializers.CharField(
+        source="organization.name",
+        read_only=True,
+    )
 
     class Meta(HomeroomAssignmentSerializer.Meta):
-        fields = HomeroomAssignmentSerializer.Meta.fields + [
+        fields = [
+            *HomeroomAssignmentSerializer.Meta.fields,
             "teacher_id",
             "teacher_name",
             "teacher_email",

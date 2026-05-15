@@ -1,12 +1,19 @@
+from attendance.models import Attendance
+from attendance.models import AttendanceReason
+from attendance.models import AttendanceSummary
 from django.contrib import admin
-
-from attendance.models import Attendance, AttendanceReason, AttendanceSummary
 
 
 class AttendanceReasonInline(admin.StackedInline):
     model = AttendanceReason
     extra = 0
-    fields = ("reason_category", "note", "parent_confirmed", "confirmed_by", "confirmed_at")
+    fields = (
+        "reason_category",
+        "note",
+        "parent_confirmed",
+        "confirmed_by",
+        "confirmed_at",
+    )
     readonly_fields = ("confirmed_by", "confirmed_at")
 
 
@@ -35,7 +42,9 @@ class AttendanceAdmin(admin.ModelAdmin):
 
     @admin.display(description="Student")
     def get_student_name(self, obj):
-        return f"{obj.student.first_name} {obj.student.last_name} ({obj.student.roll_no})"
+        return (
+            f"{obj.student.first_name} {obj.student.last_name} ({obj.student.roll_no})"
+        )
 
 
 @admin.register(AttendanceReason)
@@ -84,8 +93,12 @@ class AttendanceSummaryAdmin(admin.ModelAdmin):
         "student__roll_no",
     )
     readonly_fields = (
-        "total_present", "total_absent", "total_late",
-        "total_excused", "total_school_days", "last_updated",
+        "total_present",
+        "total_absent",
+        "total_late",
+        "total_excused",
+        "total_school_days",
+        "last_updated",
     )
 
     @admin.display(description="Student")

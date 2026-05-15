@@ -1,13 +1,14 @@
+from attendance.models import Attendance
+from attendance.models import AttendanceReason
+from attendance.models import AttendanceSummary
 from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 
-from attendance.models import Attendance, AttendanceReason, AttendanceSummary
-
-
 # ---------------------------------------------------------------------------
 # AttendanceReason
 # ---------------------------------------------------------------------------
+
 
 class AttendanceReasonSerializer(serializers.ModelSerializer):
     """Write serializer for creating/updating an absence reason."""
@@ -26,21 +27,31 @@ class AttendanceReasonSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "confirmed_by", "confirmed_at", "created_at", "updated_at"]
+        read_only_fields = [
+            "id",
+            "confirmed_by",
+            "confirmed_at",
+            "created_at",
+            "updated_at",
+        ]
 
 
 class AttendanceReasonReadSerializer(AttendanceReasonSerializer):
     """Read serializer with human-readable labels."""
 
     reason_category_display = serializers.CharField(
-        source="get_reason_category_display", read_only=True
+        source="get_reason_category_display",
+        read_only=True,
     )
     confirmed_by_name = serializers.CharField(
-        source="confirmed_by.name", read_only=True, default=None
+        source="confirmed_by.name",
+        read_only=True,
+        default=None,
     )
 
     class Meta(AttendanceReasonSerializer.Meta):
-        fields = AttendanceReasonSerializer.Meta.fields + [
+        fields = [
+            *AttendanceReasonSerializer.Meta.fields,
             "reason_category_display",
             "confirmed_by_name",
         ]
@@ -49,6 +60,7 @@ class AttendanceReasonReadSerializer(AttendanceReasonSerializer):
 # ---------------------------------------------------------------------------
 # Attendance — single record
 # ---------------------------------------------------------------------------
+
 
 class AttendanceSerializer(serializers.ModelSerializer):
     """
@@ -82,13 +94,15 @@ class AttendanceSerializer(serializers.ModelSerializer):
         # Prevent duplicate records (idempotency via client_side_id is
         # handled at the view level — here we enforce business rules).
         student = attrs.get("student", getattr(self.instance, "student", None))
-        date = attrs.get("date", getattr(self.instance, "date", None))
         section = attrs.get("section", getattr(self.instance, "section", None))
 
         # Make sure the student belongs to the submitted section
         if student and section and str(student.current_section_id) != str(section.id):
+            message = f"Student '{student}' does not belong to section '{section}'."
             raise ValidationError(
-                {"student": f"Student '{student}' does not belong to section '{section}'."}
+                {
+                    "student": message,
+                },
             )
         return attrs
 
@@ -100,14 +114,22 @@ class AttendanceReadSerializer(AttendanceSerializer):
     student_roll_no = serializers.CharField(source="student.roll_no", read_only=True)
     section_name = serializers.CharField(source="section.name", read_only=True)
     grade_name = serializers.CharField(source="section.grade.name", read_only=True)
-    academic_year_name = serializers.CharField(source="academic_year.name", read_only=True)
+    academic_year_name = serializers.CharField(
+        source="academic_year.name",
+        read_only=True,
+    )
     branch_name = serializers.CharField(source="branch.name", read_only=True)
-    recorded_by_name = serializers.CharField(source="recorded_by.name", read_only=True, default=None)
+    recorded_by_name = serializers.CharField(
+        source="recorded_by.name",
+        read_only=True,
+        default=None,
+    )
     status_display = serializers.CharField(source="get_status_display", read_only=True)
     needs_reason = serializers.BooleanField(read_only=True)
 
     class Meta(AttendanceSerializer.Meta):
-        fields = AttendanceSerializer.Meta.fields + [
+        fields = [
+            *AttendanceSerializer.Meta.fields,
             "student_name",
             "student_roll_no",
             "section_name",
@@ -127,11 +149,15 @@ class AttendanceReadSerializer(AttendanceSerializer):
 # Bulk attendance submission (teacher endpoint)
 # ---------------------------------------------------------------------------
 
+
 class BulkAttendanceItemSerializer(serializers.Serializer):
     """Schema for a single item inside a bulk attendance submission."""
 
     student = serializers.PrimaryKeyRelatedField(
-        queryset=__import__("students.models", fromlist=["Student"]).Student.objects.all()
+        queryset=__import__(
+            "students.models",
+            fromlist=["Student"],
+        ).Student.objects.all(),
     )
     status = serializers.ChoiceField(choices=Attendance.Status.choices)
     remarks = serializers.CharField(required=False, allow_blank=True, default="")
@@ -157,29 +183,43 @@ class BulkAttendanceSerializer(serializers.Serializer):
     """
 
     section = serializers.PrimaryKeyRelatedField(
-        queryset=__import__("academics.models", fromlist=["Section"]).Section.objects.all()
+        queryset=__import__(
+            "academics.models",
+            fromlist=["Section"],
+        ).Section.objects.all(),
     )
     academic_year = serializers.PrimaryKeyRelatedField(
-        queryset=__import__("academics.models", fromlist=["AcademicYear"]).AcademicYear.objects.all()
+        queryset=__import__(
+            "academics.models",
+            fromlist=["AcademicYear"],
+        ).AcademicYear.objects.all(),
     )
     organization = serializers.PrimaryKeyRelatedField(
-        queryset=__import__("organizations.models", fromlist=["Organization"]).Organization.objects.all()
+        queryset=__import__(
+            "organizations.models",
+            fromlist=["Organization"],
+        ).Organization.objects.all(),
     )
     branch = serializers.PrimaryKeyRelatedField(
-        queryset=__import__("branches.models", fromlist=["Branch"]).Branch.objects.all()
+        queryset=__import__(
+            "branches.models",
+            fromlist=["Branch"],
+        ).Branch.objects.all(),
     )
     date = serializers.DateField()
     records = BulkAttendanceItemSerializer(many=True, min_length=1)
 
     def validate_date(self, value):
         if value > timezone.localdate():
-            raise ValidationError("Attendance cannot be submitted for a future date.")
+            message = "Attendance cannot be submitted for a future date."
+            raise ValidationError(message)
         return value
 
 
 # ---------------------------------------------------------------------------
 # Parent reason update
 # ---------------------------------------------------------------------------
+
 
 class ParentReasonUpdateSerializer(serializers.ModelSerializer):
     """
@@ -210,10 +250,14 @@ class ParentReasonUpdateSerializer(serializers.ModelSerializer):
 # AttendanceSummary
 # ---------------------------------------------------------------------------
 
+
 class AttendanceSummarySerializer(serializers.ModelSerializer):
     attendance_rate = serializers.FloatField(read_only=True)
     student_name = serializers.SerializerMethodField()
-    academic_year_name = serializers.CharField(source="academic_year.name", read_only=True)
+    academic_year_name = serializers.CharField(
+        source="academic_year.name",
+        read_only=True,
+    )
 
     class Meta:
         model = AttendanceSummary

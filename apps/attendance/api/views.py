@@ -1,25 +1,34 @@
-from django.db import transaction, IntegrityError
-from rest_framework import status, viewsets
+from attendance.models import Attendance
+from attendance.models import AttendanceReason
+from attendance.models import AttendanceSummary
+from django.db import IntegrityError
+from django.db import transaction
+from django.db.models import Q
+from django.utils import timezone
+from rest_framework import status
+from rest_framework import viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.filters import SearchFilter
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from attendance.models import Attendance, AttendanceReason, AttendanceSummary
-from .serializers import (
-    AttendanceSerializer,
-    AttendanceReadSerializer,
-    AttendanceReasonSerializer,
-    AttendanceReasonReadSerializer,
-    BulkAttendanceSerializer,
-    ParentReasonUpdateSerializer,
-    AttendanceSummarySerializer,
-)
+from core.api.access import scope_queryset_for_user
+from core.api.access import user_can_access_student_as_parent_or_staff
+from core.api.access import user_resource_access_filter
 
+from .serializers import AttendanceReadSerializer
+from .serializers import AttendanceReasonReadSerializer
+from .serializers import AttendanceReasonSerializer
+from .serializers import AttendanceSerializer
+from .serializers import AttendanceSummarySerializer
+from .serializers import BulkAttendanceSerializer
+from .serializers import ParentReasonUpdateSerializer
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _tenant_qs(qs, request):
     """
@@ -36,6 +45,7 @@ def _tenant_qs(qs, request):
 # ---------------------------------------------------------------------------
 # Attendance ViewSet
 # ---------------------------------------------------------------------------
+
 
 class AttendanceViewSet(viewsets.ModelViewSet):
     """
@@ -90,6 +100,10 @@ class AttendanceViewSet(viewsets.ModelViewSet):
             "recorded_by",
             "reason",
         )
+        if getattr(self, "swagger_fake_view", False):
+            return qs.none()
+
+        qs = scope_queryset_for_user(qs, self.request.user)
         p = self.request.query_params
         if p.get("organization"):
             qs = qs.filter(organization_id=p["organization"])
@@ -108,7 +122,13 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         return qs
 
     def get_serializer_class(self):
-        if self.action in ["list", "retrieve", "by_section", "by_student", "daily_status"]:
+        if self.action in [
+            "list",
+            "retrieve",
+            "by_section",
+            "by_student",
+            "daily_status",
+        ]:
             return AttendanceReadSerializer
         return AttendanceSerializer
 
@@ -157,7 +177,8 @@ class AttendanceViewSet(viewsets.ModelViewSet):
                             "recorded_by": request.user,
                             "status": item["status"],
                             "remarks": item.get("remarks", ""),
-                            "client_side_id": item.get("client_side_id", None) or __import__("uuid").uuid4(),
+                            "client_side_id": item.get("client_side_id", None)
+                            or __import__("uuid").uuid4(),
                         },
                     )
                     if was_created:
@@ -165,10 +186,12 @@ class AttendanceViewSet(viewsets.ModelViewSet):
                     else:
                         skipped.append(str(obj.id))
                 except IntegrityError as exc:
-                    errors.append({
-                        "student": str(item["student"].id),
-                        "error": str(exc),
-                    })
+                    errors.append(
+                        {
+                            "student": str(item["student"].id),
+                            "error": str(exc),
+                        },
+                    )
 
         return Response(
             {
@@ -243,14 +266,9 @@ class AttendanceViewSet(viewsets.ModelViewSet):
           student name, roll_no, photo, section, grade, branch,
           status, remarks, reason (if any), and recorded_by.
         """
-        from django.utils import timezone
-
         # Resolve the target date (default = today)
         date_param = request.query_params.get("date")
-        if date_param:
-            target_date = date_param          # validated by DB if malformed
-        else:
-            target_date = timezone.localdate()
+        target_date = date_param or timezone.localdate()
 
         qs = self.get_queryset().filter(date=target_date)
 
@@ -269,7 +287,7 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         if p.get("organization"):
             qs = qs.filter(organization_id=p["organization"])
 
-        qs = self.filter_queryset(qs)          # applies ?search=
+        qs = self.filter_queryset(qs)  # applies ?search=
         qs = qs.select_related(
             "student__current_section__grade",
             "student__branch",
@@ -277,16 +295,19 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         )
 
         serializer = AttendanceReadSerializer(qs, many=True)
-        return Response({
-            "date": str(target_date),
-            "count": qs.count(),
-            "results": serializer.data,
-        })
+        return Response(
+            {
+                "date": str(target_date),
+                "count": qs.count(),
+                "results": serializer.data,
+            },
+        )
 
 
 # ---------------------------------------------------------------------------
 # AttendanceReason ViewSet
 # ---------------------------------------------------------------------------
+
 
 class AttendanceReasonViewSet(viewsets.ModelViewSet):
     """
@@ -317,6 +338,27 @@ class AttendanceReasonViewSet(viewsets.ModelViewSet):
             "organization",
             "confirmed_by",
         )
+        if getattr(self, "swagger_fake_view", False):
+            return qs.none()
+
+        if self.action == "parent_update":
+            qs = qs.filter(
+                user_resource_access_filter(
+                    self.request.user,
+                    organization_lookup="attendance__organization",
+                    branch_lookup="attendance__branch",
+                )
+                | Q(
+                    attendance__student__parent_links__parent__user=self.request.user,
+                ),
+            ).distinct()
+        else:
+            qs = scope_queryset_for_user(
+                qs,
+                self.request.user,
+                organization_lookup="attendance__organization",
+                branch_lookup="attendance__branch",
+            )
         p = self.request.query_params
         if p.get("organization"):
             qs = qs.filter(organization_id=p["organization"])
@@ -340,7 +382,7 @@ class AttendanceReasonViewSet(viewsets.ModelViewSet):
     # PATCH /attendance-reasons/<id>/parent-update/
     # ------------------------------------------------------------------
     @action(detail=True, methods=["patch"], url_path="parent-update")
-    def parent_update(self, request, id=None):
+    def parent_update(self, request, pk=None):
         """
         Parent-only endpoint to provide / confirm an absence reason.
         Only allows editing: reason_category, note, parent_confirmed.
@@ -349,6 +391,12 @@ class AttendanceReasonViewSet(viewsets.ModelViewSet):
               linked parents (check ParentStudentLink).
         """
         reason = self.get_object()
+        if not user_can_access_student_as_parent_or_staff(
+            request.user,
+            reason.attendance.student,
+        ):
+            message = "You cannot update this attendance reason."
+            raise PermissionDenied(message)
 
         # Guard: reason must be for a non-PRESENT attendance
         if not reason.attendance.needs_reason:
@@ -358,7 +406,10 @@ class AttendanceReasonViewSet(viewsets.ModelViewSet):
             )
 
         serializer = ParentReasonUpdateSerializer(
-            reason, data=request.data, partial=True, context={"request": request}
+            reason,
+            data=request.data,
+            partial=True,
+            context={"request": request},
         )
         serializer.is_valid(raise_exception=True)
         serializer.save()
@@ -368,6 +419,7 @@ class AttendanceReasonViewSet(viewsets.ModelViewSet):
 # ---------------------------------------------------------------------------
 # AttendanceSummary ViewSet (read-only)
 # ---------------------------------------------------------------------------
+
 
 class AttendanceSummaryViewSet(viewsets.ReadOnlyModelViewSet):
     """
@@ -394,7 +446,17 @@ class AttendanceSummaryViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         qs = AttendanceSummary.objects.select_related(
-            "student", "academic_year", "organization"
+            "student",
+            "academic_year",
+            "organization",
+        )
+        if getattr(self, "swagger_fake_view", False):
+            return qs.none()
+
+        qs = scope_queryset_for_user(
+            qs,
+            self.request.user,
+            branch_lookup="student__branch",
         )
         p = self.request.query_params
         if p.get("organization"):

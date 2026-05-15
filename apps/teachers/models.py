@@ -2,7 +2,8 @@ from django.conf import settings
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
-from core.models import TimeStampedModel, UUIDModel
+from core.models import TimeStampedModel
+from core.models import UUIDModel
 
 
 class Teacher(UUIDModel, TimeStampedModel):
@@ -147,13 +148,13 @@ class HomeroomAssignment(UUIDModel, TimeStampedModel):
     )
     section = models.ForeignKey(
         "academics.Section",
-        on_delete=models.PROTECT,          # prevent accidental cascade
+        on_delete=models.PROTECT,  # prevent accidental cascade
         related_name="homeroom_assignments",
         verbose_name=_("Section"),
     )
     teacher = models.ForeignKey(
         Teacher,
-        on_delete=models.PROTECT,          # preserve history if teacher leaves
+        on_delete=models.PROTECT,  # preserve history if teacher leaves
         related_name="homeroom_assignments",
         verbose_name=_("Homeroom Teacher"),
     )

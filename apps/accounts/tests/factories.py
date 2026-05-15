@@ -32,4 +32,3 @@ class UserFactory(DjangoModelFactory[User]):
         model = User
         django_get_or_create = ["email"]
         skip_postgeneration_save = True
-

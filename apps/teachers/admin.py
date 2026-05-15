@@ -1,5 +1,8 @@
 from django.contrib import admin
-from teachers.models import Teacher, TeacherQualification, TeacherSubjectAssignment, HomeroomAssignment
+from teachers.models import HomeroomAssignment
+from teachers.models import Teacher
+from teachers.models import TeacherQualification
+from teachers.models import TeacherSubjectAssignment
 
 
 class TeacherQualificationInline(admin.TabularInline):
@@ -8,14 +11,19 @@ class TeacherQualificationInline(admin.TabularInline):
 
 
 @admin.register(Teacher)
-
 class TeacherAdmin(admin.ModelAdmin):
-    list_display = ("employee_id", "get_user_name", "branch", "organization", "joining_date")
+    list_display = (
+        "employee_id",
+        "get_user_name",
+        "branch",
+        "organization",
+        "joining_date",
+    )
     search_fields = ("employee_id", "user__name", "user__email", "specialization")
     list_filter = ("branch", "organization", "joining_date")
     inlines = [TeacherQualificationInline]
 
-    @admin.display(description='Name')
+    @admin.display(description="Name")
     def get_user_name(self, obj):
         return obj.user.name
 

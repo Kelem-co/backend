@@ -1,5 +1,5 @@
-from django.contrib import admin
 from analytics.models import InterventionLog
+from django.contrib import admin
 
 
 @admin.register(InterventionLog)
