@@ -5,6 +5,8 @@ from branches.models import BranchAdmin
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 
+from core.api.access import scope_queryset_for_user
+
 
 class BranchViewSet(viewsets.ModelViewSet):
     queryset = Branch.objects.select_related(
@@ -19,7 +21,11 @@ class BranchViewSet(viewsets.ModelViewSet):
         if getattr(self, "swagger_fake_view", False):
             return self.queryset.none()
 
-        return self.queryset.filter(organization__owner=self.request.user)
+        return scope_queryset_for_user(
+            self.queryset,
+            self.request.user,
+            branch_lookup="self",
+        )
 
 
 class BranchAdminViewSet(viewsets.ModelViewSet):
@@ -36,4 +42,4 @@ class BranchAdminViewSet(viewsets.ModelViewSet):
         if getattr(self, "swagger_fake_view", False):
             return self.queryset.none()
 
-        return self.queryset.filter(organization__owner=self.request.user)
+        return scope_queryset_for_user(self.queryset, self.request.user)
