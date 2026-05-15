@@ -99,6 +99,7 @@ LOCAL_APPS = [
     "attendance",
     "analytics",
     "assessments",
+    "announcements",
     "core",
     # Your stuff: custom apps go here
 ]
