@@ -1,0 +1,74 @@
+{% comment %} djlint:off H021 {% endcomment %}
+<table width="100%"
+       border="0"
+       cellpadding="0"
+       cellspacing="0"
+       style="background-color: #f4f5f7;
+              margin: 0;
+              padding: 0;
+              width: 100%">
+  <tr>
+    <td align="center" style="padding: 40px 20px">
+      <table width="100%"
+             border="0"
+             cellpadding="0"
+             cellspacing="0"
+             style="max-width: 600px;
+                    background-color: #ffffff;
+                    border: 1px solid #e5e7eb;
+                    border-radius: 8px;
+                    overflow: hidden">
+        <tr>
+          <td align="center" style="padding: 30px 30px 20px 30px">
+            <h1 style="margin: 0;
+                       font-size: 24px;
+                       font-weight: bold;
+                       color: #111827;
+                       text-align: center;
+                       line-height: 1.4">{{ heading }}</h1>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding: 0 30px 20px 30px;
+                     color: #4b5563;
+                     font-size: 14px;
+                     line-height: 1.7">
+            <p style="margin: 0 0 16px 0">{{ intro_text }}</p>
+            {% if secondary_intro_text %}<p style="margin: 0 0 16px 0">{{ secondary_intro_text }}</p>{% endif %}
+            <p style="margin: 0 0 16px 0">
+              <strong>{{ user.get_full_name|default:user.email }}</strong>
+              <br />
+              {{ user.email }}
+            </p>
+            {% if cta_url %}
+              <p style="margin: 24px 0">
+                <a href="{{ cta_url }}"
+                   style="display: inline-block;
+                          background-color: #1e2875;
+                          color: #ffffff;
+                          text-decoration: none;
+                          border-radius: 999px;
+                          padding: 14px 24px;
+                          font-weight: bold">{{ cta_label }}</a>
+              </p>
+            {% endif %}
+            {% if copy_text %}
+              <p style="margin: 0 0 8px 0">
+                <strong>{{ copy_label }}</strong>
+              </p>
+              <p style="margin: 0 0 16px 0; color: #1e2875; word-break: break-all">{{ copy_text }}</p>
+            {% endif %}
+            {% if notice_title %}
+              <p style="margin: 0 0 8px 0">
+                <strong>{{ notice_title }}</strong>
+              </p>
+              <p style="margin: 0 0 16px 0">{{ notice_text }}</p>
+            {% endif %}
+            <p style="margin: 0; color: #6b7280; font-size: 12px">{{ footer_text }}</p>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+{% comment %} djlint:on {% endcomment %}

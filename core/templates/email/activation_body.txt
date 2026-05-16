@@ -1,0 +1,18 @@
+Account activation on {{ site_name }}
+
+You are receiving this email because you need to finish activating your account on {{ site_name }}.
+
+Please use the activation link below to continue.
+
+{{ user.get_full_name|default:user.email }}
+{{ user.email }}
+
+Activate Account: {{ full_url }}
+
+Or copy this link:
+{{ full_url }}
+
+Link expires in 24 hours
+Please activate your account soon to avoid expiration.
+
+The {{ site_name }} team

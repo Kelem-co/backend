@@ -86,6 +86,7 @@ THIRD_PARTY_APPS = [
     "corsheaders",
     "drf_spectacular",
     "django_seed",
+    "djoser",
 ]
 
 LOCAL_APPS = [
@@ -239,6 +240,23 @@ EMAIL_BACKEND = env(
 )
 # https://docs.djangoproject.com/en/dev/ref/settings/#email-timeout
 EMAIL_TIMEOUT = 5
+# https://docs.djangoproject.com/en/dev/ref/settings/#default-from-email
+DEFAULT_FROM_EMAIL = env(
+    "DJANGO_DEFAULT_FROM_EMAIL",
+    default="noreply@example.com",
+)
+# Frontend URL for generating activation/password reset links in emails
+# Used by Djoser email classes to generate ACTIVATION_URL and PASSWORD_RESET_CONFIRM_URL
+# Format: https://yourdomain.com (no trailing slash)
+FRONTEND_DOMAIN = env(
+    "FRONTEND_DOMAIN",
+    default="http://localhost:3000",
+)
+# Whether to use HTTPS in email links (useful for localhost:8000 but remote is https)
+FRONTEND_PROTOCOL = env(
+    "FRONTEND_PROTOCOL",
+    default="http" if DEBUG else "https",
+)
 
 # ADMIN
 # ------------------------------------------------------------------------------
@@ -341,13 +359,17 @@ SOCIALACCOUNT_FORMS = {"signup": "accounts.forms.UserSocialSignupForm"}
 # django-rest-framework - https://www.django-rest-framework.org/api-guide/settings/
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
         "rest_framework.authentication.SessionAuthentication",
-        "rest_framework.authentication.TokenAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 10,
+}
+
+SIMPLE_JWT = {
+    "AUTH_HEADER_TYPES": ("JWT",),
 }
 
 
@@ -360,7 +382,7 @@ SPECTACULAR_SETTINGS = {
     "TITLE": "core API",
     "DESCRIPTION": "Documentation of API endpoints of core",
     "VERSION": "1.0.0",
-    "SERVE_PERMISSIONS": ["rest_framework.permissions.IsAdminUser"],
+    "SERVE_PERMISSIONS": ["rest_framework.permissions.AllowAny"],
     "SCHEMA_PATH_PREFIX": "/api/",
 }
 # Your stuff...
@@ -378,3 +400,23 @@ def patched_make_aware(value, timezone_obj=None, is_dst=None):
 
 
 timezone.make_aware = patched_make_aware
+
+DJOSER = {
+    "TOKEN_MODEL": None,
+    "EMAIL_FRONTEND_DOMAIN": FRONTEND_DOMAIN,
+    "EMAIL_FRONTEND_PROTOCOL": FRONTEND_PROTOCOL,
+    "SERIALIZERS": {
+        "user_create": "accounts.api.serializers.UserCreateSerializer",
+    },
+    "SEND_ACTIVATION_EMAIL": True,
+    "SEND_CONFIRMATION_EMAIL": True,
+    "PASSWORD_CHANGED_EMAIL_CONFIRMATION": True,
+    "EMAIL": {
+        "activation": "accounts.email.ActivationEmail",
+        "confirmation": "accounts.email.ConfirmationEmail",
+        "password_reset": "accounts.email.PasswordResetEmail",
+        "password_changed_confirmation": "accounts.email.PasswordChangedConfirmationEmail",
+    },
+    "ACTIVATION_URL": "activate/{uid}/{token}",
+    "PASSWORD_RESET_CONFIRM_URL": "reset-password/{uid}/{token}",
+}
