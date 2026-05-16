@@ -12,3 +12,8 @@ REDIS_URL=redis://redis:6379/0
 # Flower
 CELERY_FLOWER_USER=xihrpRSLOboKOYNwTMMCEsBwUpfewlZe
 CELERY_FLOWER_PASSWORD=HJzQwmZhXEFJPeETEOAlhL7eeMrlSdl68rUNWj9OezBA7hYkj9LQI0VaAl4vWqBx
+
+# EMAIL
+# ------------------------------------------------------------------------------
+EMAIL_HOST=mailpit
+EMAIL_PORT=1025
