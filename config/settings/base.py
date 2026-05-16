@@ -258,6 +258,22 @@ FRONTEND_PROTOCOL = env(
     default="http" if DEBUG else "https",
 )
 
+# ETHIOPIA ETRADE VERIFICATION
+# ------------------------------------------------------------------------------
+ETRADE_API_BASE_URL = env(
+    "ETRADE_API_BASE_URL",
+    default="https://etrade.gov.et/api",
+)
+ETRADE_API_TIMEOUT = env.int("ETRADE_API_TIMEOUT", default=10)
+ETRADE_API_REFERER = env(
+    "ETRADE_API_REFERER",
+    default="https://etrade.gov.et/",
+)
+ETRADE_API_USER_AGENT = env(
+    "ETRADE_API_USER_AGENT",
+    default="Mozilla/5.0",
+)
+
 # ADMIN
 # ------------------------------------------------------------------------------
 # Django Admin URL.

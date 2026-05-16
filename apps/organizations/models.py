@@ -16,6 +16,16 @@ class Organization(UUIDModel, TimeStampedModel):
         INACTIVE = "INACTIVE", _("Inactive")
         PENDING = "PENDING", _("Pending")
 
+    class VerificationStatus(models.TextChoices):
+        VERIFIED = "verified", _("Verified")
+        PENDING_MANUAL_REVIEW = "pending_manual_review", _("Pending Manual Review")
+        VERIFICATION_UNAVAILABLE = (
+            "verification_unavailable",
+            _(
+                "Verification Unavailable",
+            ),
+        )
+
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.RESTRICT,
@@ -41,6 +51,38 @@ class Organization(UUIDModel, TimeStampedModel):
         max_length=20,
         choices=Status.choices,
         default=Status.PENDING,
+    )
+    verification_status = models.CharField(
+        _("Verification Status"),
+        max_length=32,
+        choices=VerificationStatus.choices,
+        default=VerificationStatus.PENDING_MANUAL_REVIEW,
+    )
+    verification_checked_at = models.DateTimeField(
+        _("Verification Checked At"),
+        blank=True,
+        null=True,
+    )
+    verification_failure_reason = models.CharField(
+        _("Verification Failure Reason"),
+        max_length=255,
+        blank=True,
+    )
+    verification_match_source = models.CharField(
+        _("Verification Match Source"),
+        max_length=100,
+        blank=True,
+    )
+    verified_name = models.CharField(_("Verified Name"), max_length=255, blank=True)
+    verified_license_no = models.CharField(
+        _("Verified License Number"),
+        max_length=100,
+        blank=True,
+    )
+    verified_tin_number = models.CharField(
+        _("Verified TIN Number"),
+        max_length=20,
+        blank=True,
     )
 
     class Meta:
