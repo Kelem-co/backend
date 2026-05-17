@@ -101,6 +101,7 @@ LOCAL_APPS = [
     "analytics",
     "assessments",
     "core",
+    "media",
     # Your stuff: custom apps go here
 ]
 # https://docs.djangoproject.com/en/dev/ref/settings/#installed-apps
@@ -352,6 +353,7 @@ CELERY_WORKER_SEND_TASK_EVENTS = True
 CELERY_TASK_SEND_SENT_EVENT = True
 # https://docs.celeryq.dev/en/stable/userguide/configuration.html#worker-hijack-root-logger
 CELERY_WORKER_HIJACK_ROOT_LOGGER = False
+
 # django-allauth
 # ------------------------------------------------------------------------------
 ACCOUNT_ALLOW_REGISTRATION = env.bool("DJANGO_ACCOUNT_ALLOW_REGISTRATION", True)
@@ -382,10 +384,11 @@ REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 10,
+    "EXCEPTION_HANDLER": "core.api.exceptions.api_exception_handler",
 }
 
 SIMPLE_JWT = {
-    "AUTH_HEADER_TYPES": ("JWT",),
+    "AUTH_HEADER_TYPES": ("Bearer", "JWT"),
 }
 
 
@@ -401,6 +404,29 @@ SPECTACULAR_SETTINGS = {
     "SERVE_PERMISSIONS": ["rest_framework.permissions.AllowAny"],
     "SCHEMA_PATH_PREFIX": "/api/",
 }
+
+# Media Upload Settings
+# -----------------------------------------------------------------------
+MEDIA_UPLOAD_SETTINGS = {
+    "BUCKET_NAME": env("S3_BUCKET", default=""),
+    "REGION": env("S3_REGION", default=""),
+    "ENDPOINT_URL": env("S3_ENDPOINT", default=""),
+    "INTERNAL_ENDPOINT_URL": env("S3_INTERNAL_ENDPOINT", default=""),
+    "PRESIGNED_URL_TTL": env.int("S3_PRESIGNED_URL_TTL", default=900),
+    "DOWNLOAD_URL_TTL": env.int("S3_DOWNLOAD_URL_TTL", default=86400),
+    "UPLOAD_TTL": env.int("S3_UPLOAD_TTL", default=3600),
+    "FINGERPRINT_WINDOW": env.int("S3_FINGERPRINT_WINDOW", default=3600),
+    "FILE_SIZE_LIMITS": {
+        "image/*": env.int("MEDIA_MAX_IMAGE_SIZE", default=10_000_000),
+        "video/*": env.int("MEDIA_MAX_VIDEO_SIZE", default=500_000_000),
+        "application/pdf": env.int("MEDIA_MAX_PDF_SIZE", default=50_000_000),
+        "default": env.int("MEDIA_MAX_DEFAULT_SIZE", default=100_000_000),
+    },
+}
+
+S3_ACCESS_KEY_ID = env("S3_ACCESS_KEY_ID", default="")
+S3_SECRET_ACCESS_KEY = env("S3_SECRET_ACCESS_KEY", default="")
+
 # Your stuff...
 # ------------------------------------------------------------------------------
 

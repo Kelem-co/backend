@@ -9,6 +9,9 @@ from rest_framework import status
 from rest_framework.test import APIClient
 from rest_framework.test import APIRequestFactory
 
+from media.models import StatusChoices
+from media.tests.factories import MediaFileFactory
+
 
 @pytest.mark.django_db
 class TestOrganizationViewSet:
@@ -77,6 +80,51 @@ class TestOrganizationViewSet:
         assert response.data["verification_status"] == "verified"
         assert response.data["verification_failure_reason"] == ""
         assert response.data["requires_manual_verification"] is False
+
+    def test_create_accepts_business_license_media_reference(
+        self,
+        api_client: APIClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        user = UserFactory()
+        api_client.force_authenticate(user=user)
+        media = MediaFileFactory(
+            uploaded_by=user,
+            status=StatusChoices.UPLOADED,
+            content_type="image/png",
+        )
+
+        monkeypatch.setattr(
+            "organizations.services.organization_creation.verify_organization_registration",
+            lambda **_: VerificationOutcome(
+                verification_status="verified",
+                organization_status="ACTIVE",
+                verification_failure_reason="",
+                verification_match_source="license_lookup",
+                verified_name="Example Trading PLC",
+                verified_license_no="LIC-123",
+                verified_tin_number="1234567890",
+            ),
+        )
+
+        response = api_client.post(
+            "/api/organizations/",
+            {
+                "name": "Example Trading PLC",
+                "trade_name": "Example Trading",
+                "tin_number": "1234567890",
+                "license_no": "LIC-123",
+                "client_full_name": "Owner Name",
+                "business_address": "Addis Ababa",
+                "business_phone_number": "0911000000",
+                "client_phone_number": "0911000001",
+                "business_license_image": str(media.id),
+            },
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert str(response.data["business_license_image"]) == str(media.id)
 
     def test_create_returns_pending_manual_review_when_inconclusive(
         self,

@@ -40,9 +40,11 @@ class Organization(UUIDModel, TimeStampedModel):
     business_address = models.TextField(_("Business Address"))
     business_phone_number = models.CharField(_("Business Phone Number"), max_length=50)
     client_phone_number = models.CharField(_("Client Phone Number"), max_length=50)
-    business_license_image = models.ImageField(
-        _("Business License Image"),
-        upload_to=organization_license_upload_path,
+    business_license_image = models.ForeignKey(
+        "media.MediaFile",
+        verbose_name=_("Business License Image"),
+        on_delete=models.SET_NULL,
+        related_name="organization_license_files",
         blank=True,
         null=True,
     )

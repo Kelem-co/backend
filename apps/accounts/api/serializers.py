@@ -38,6 +38,28 @@ class UserSerializer(serializers.ModelSerializer[User]):
         return super().update(instance, validated_data)
 
 
+class UserUpdateSerializer(serializers.ModelSerializer[User]):
+    password = serializers.CharField(write_only=True, required=False)
+
+    class Meta:
+        model = User
+        fields = [
+            "name",
+            "father_name",
+            "grandfather_name",
+            "email",
+            "phone_number",
+            "address",
+            "password",
+        ]
+
+    def update(self, instance, validated_data):
+        password = validated_data.pop("password", None)
+        if password:
+            instance.set_password(password)
+        return super().update(instance, validated_data)
+
+
 class UserCreateSerializer(DjoserUserCreateSerializer):
     forbidden_signup_fields = frozenset(
         {

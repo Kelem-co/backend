@@ -1,9 +1,16 @@
 from organizations.models import Organization
 from rest_framework import serializers
 
+from media.api.serializers import MediaFileReferenceField
+
 
 class OrganizationSerializer(serializers.ModelSerializer):
     requires_manual_verification = serializers.SerializerMethodField()
+    business_license_image = MediaFileReferenceField(
+        required=False,
+        allow_null=True,
+        content_type_prefix="image/",
+    )
 
     class Meta:
         model = Organization

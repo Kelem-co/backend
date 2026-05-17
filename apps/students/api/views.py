@@ -207,6 +207,7 @@ class StudentViewSet(viewsets.ModelViewSet):
             "current_section__academic_year",
             "branch",
             "organization",
+            "photo",
         )
         if getattr(self, "swagger_fake_view", False):
             return qs.none()

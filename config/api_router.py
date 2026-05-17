@@ -13,6 +13,8 @@ from attendance.api.views import AttendanceViewSet
 from branches.api.views import BranchAdminViewSet
 from branches.api.views import BranchViewSet
 from django.conf import settings
+from django.urls import include
+from django.urls import path
 from organizations.api.views import OrganizationViewSet
 from rest_framework.routers import DefaultRouter
 from rest_framework.routers import SimpleRouter
@@ -81,4 +83,4 @@ router.register(
 )
 
 app_name = "api"
-urlpatterns = router.urls
+urlpatterns = [*router.urls, path("", include("media.api.urls"))]

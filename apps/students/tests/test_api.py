@@ -14,6 +14,9 @@ from students.tests.factories import ParentFactory
 from students.tests.factories import ParentStudentLinkFactory
 from students.tests.factories import StudentFactory
 
+from media.models import StatusChoices
+from media.tests.factories import MediaFileFactory
+
 
 @pytest.mark.django_db
 class TestStudentsAPI:
@@ -44,6 +47,11 @@ class TestStudentsAPI:
 
     def test_student_crud(self, api_client, user, organization, branch, section):
         api_client.force_authenticate(user=user)
+        media = MediaFileFactory(
+            uploaded_by=user,
+            status=StatusChoices.UPLOADED,
+            content_type="image/jpeg",
+        )
 
         data = {
             "organization": str(organization.id),
@@ -55,11 +63,13 @@ class TestStudentsAPI:
             "roll_no": "R101",
             "current_section": str(section.id),
             "admission_date": "2023-09-01",
+            "photo": str(media.id),
             "status": "ACTIVE",
         }
         response = api_client.post("/api/students/", data)
         assert response.status_code == status.HTTP_201_CREATED
         student_id = response.data["id"]
+        assert str(response.data["photo"]) == str(media.id)
 
         response = api_client.get("/api/students/")
         assert response.status_code == status.HTTP_200_OK
@@ -68,6 +78,7 @@ class TestStudentsAPI:
         response = api_client.get(f"/api/students/{student_id}/")
         assert response.status_code == status.HTTP_200_OK
         assert response.data["first_name"] == "Alice"
+        assert str(response.data["photo"]) == str(media.id)
 
         response = api_client.patch(
             f"/api/students/{student_id}/",
