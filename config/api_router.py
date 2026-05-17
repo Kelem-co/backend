@@ -80,5 +80,9 @@ router.register(
     basename="assessment-result",
 )
 
+from django.urls import include, path
+
 app_name = "api"
-urlpatterns = router.urls
+urlpatterns = router.urls + [
+    path("chat/", include("communications.urls")),
+]

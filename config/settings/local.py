@@ -13,7 +13,17 @@ SECRET_KEY = env(
     default="CBE9Ipus3hIZnaFUBIeMcefkT4vTEHhHbGXiZ0qjwvU2gcGaYAZWyhmWgA3vdj3J",
 )
 # https://docs.djangoproject.com/en/dev/ref/settings/#allowed-hosts
-ALLOWED_HOSTS = ["localhost", "0.0.0.0", "127.0.0.1"]  # noqa: S104
+ALLOWED_HOSTS = [
+    "localhost",
+    "0.0.0.0",
+    "127.0.0.1",
+    ".trycloudflare.com",
+]
+
+# CSRF
+# ------------------------------------------------------------------------------
+# https://docs.djangoproject.com/en/dev/ref/settings/#csrf-trusted-origins
+CSRF_TRUSTED_ORIGINS = ["https://*.trycloudflare.com"]
 
 # CACHES
 # ------------------------------------------------------------------------------

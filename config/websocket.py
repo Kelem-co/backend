@@ -1,13 +1,13 @@
-async def websocket_application(scope, receive, send):
-    while True:
-        event = await receive()
+from channels.routing import ProtocolTypeRouter, URLRouter
+from django.core.asgi import get_asgi_application
 
-        if event["type"] == "websocket.connect":
-            await send({"type": "websocket.accept"})
+# Import your custom middleware and routing
+from communications.middleware import QueryAuthMiddleware
+import communications.routing
 
-        if event["type"] == "websocket.disconnect":
-            break
-
-        if event["type"] == "websocket.receive":
-            if event["text"] == "ping":
-                await send({"type": "websocket.send", "text": "pong!"})
+# The WebSocket application handles connection using our custom middleware
+websocket_application = QueryAuthMiddleware(
+    URLRouter(
+        communications.routing.websocket_urlpatterns
+    )
+)
