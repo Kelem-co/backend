@@ -13,6 +13,7 @@ ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=0
 
 # Install apt packages
 RUN apt-get update && apt-get install --no-install-recommends -y \
+  ca-certificates \
   # dependencies for building Python packages
   build-essential \
   # psycopg dependencies
@@ -35,6 +36,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 # devcontainer dependencies and utils
 RUN apt-get update && apt-get install --no-install-recommends -y \
+  ca-certificates \
   sudo git bash-completion nano ssh
 
 # Create devcontainer user and add it to sudoers

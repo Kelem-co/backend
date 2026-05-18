@@ -393,8 +393,10 @@ SIMPLE_JWT = {
 
 
 # django-cors-headers - https://github.com/adamchainz/django-cors-headers#setup
-CORS_URLS_REGEX = r"^/api/.*$"
-
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^/api/.*$",
+    r"^/auth/.*$",
+]
 # By Default swagger ui is available only to admin user(s). You can change permission classes to change that
 # See more configuration options at https://drf-spectacular.readthedocs.io/en/latest/settings.html#settings
 SPECTACULAR_SETTINGS = {
@@ -410,7 +412,8 @@ SPECTACULAR_SETTINGS = {
 MEDIA_UPLOAD_SETTINGS = {
     "BUCKET_NAME": env("S3_BUCKET", default=""),
     "REGION": env("S3_REGION", default=""),
-    "ENDPOINT_URL": env("S3_ENDPOINT", default=""),
+    "ENDPOINT_URL": env("S3_PUBLIC_ENDPOINT", default="")
+    or env("S3_ENDPOINT", default=""),
     "INTERNAL_ENDPOINT_URL": env("S3_INTERNAL_ENDPOINT", default=""),
     "PRESIGNED_URL_TTL": env.int("S3_PRESIGNED_URL_TTL", default=900),
     "DOWNLOAD_URL_TTL": env.int("S3_DOWNLOAD_URL_TTL", default=86400),

@@ -6,10 +6,13 @@ from media.storage import S3StorageClient
 
 
 @mock.patch("media.storage.boto3.client")
-def test_storage_uses_internal_endpoint_for_server_calls(mock_boto_client, settings):
+def test_storage_uses_public_endpoint_for_presigned_urls(
+    mock_boto_client,
+    settings,
+):
     settings.MEDIA_UPLOAD_SETTINGS["BUCKET_NAME"] = "core-local"
     settings.MEDIA_UPLOAD_SETTINGS["REGION"] = "us-west-2"
-    settings.MEDIA_UPLOAD_SETTINGS["ENDPOINT_URL"] = "http://localhost:9023"
+    settings.MEDIA_UPLOAD_SETTINGS["ENDPOINT_URL"] = "https://uploads.example.com"
     settings.MEDIA_UPLOAD_SETTINGS["INTERNAL_ENDPOINT_URL"] = "http://minio:9000"
     settings.S3_ACCESS_KEY_ID = "minioadmin"
     settings.S3_SECRET_ACCESS_KEY = "password"  # noqa: S105
@@ -34,7 +37,7 @@ def test_storage_uses_internal_endpoint_for_server_calls(mock_boto_client, setti
     )
     assert (
         mock_boto_client.call_args_list[1].kwargs["endpoint_url"]
-        == "http://localhost:9023"
+        == "https://uploads.example.com"
     )
     internal_client.head_object.assert_called_once_with(
         Bucket="core-local",

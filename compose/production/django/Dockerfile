@@ -10,6 +10,7 @@ WORKDIR ${APP_HOME}
 
 # Install apt packages
 RUN apt-get update && apt-get install --no-install-recommends -y \
+  ca-certificates \
   # dependencies for building Python packages
   build-essential \
   # psycopg dependencies
@@ -41,6 +42,7 @@ RUN addgroup --system django \
 
 # Install required system dependencies
 RUN apt-get update && apt-get install --no-install-recommends -y \
+  ca-certificates \
   # psycopg dependencies
   libpq-dev \
   # Translations dependencies

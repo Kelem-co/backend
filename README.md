@@ -29,6 +29,42 @@ Running type checks with mypy:
 
     uv run mypy core
 
+### MCP API docs server
+
+This repo includes a small read-only MCP server that exposes the backend
+OpenAPI schema for AI agents.
+
+Run it over stdio with:
+
+    uv run backend-api-docs-mcp
+
+Or expose the same MCP server over HTTP from Django at:
+
+    POST /api/mcp/
+
+Example request:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "initialize",
+  "params": {}
+}
+```
+
+It exposes two MCP resources:
+
+- `resource://backend-api-docs/openapi-schema`
+- `resource://backend-api-docs/api-summary`
+
+Optional environment variables:
+
+- `BACKEND_API_SCHEMA_URL` to override the live schema URL
+- `BACKEND_API_SCHEMA_FALLBACK_PATH` to use a local schema file if the backend is unavailable
+- `BACKEND_API_SCHEMA_TIMEOUT_SECONDS` to change the live fetch timeout
+- `BACKEND_API_SCHEMA_AUTH_HEADER`, `BACKEND_API_SCHEMA_AUTH_SCHEME`, and `BACKEND_API_SCHEMA_AUTH_TOKEN` for authenticated schema fetches
+
 ### Test coverage
 
 To run the tests, check your test coverage, and generate an HTML coverage report:

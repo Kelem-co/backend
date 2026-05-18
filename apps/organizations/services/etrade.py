@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import ssl
 from dataclasses import dataclass
 from typing import Any
 from urllib.error import HTTPError
@@ -54,6 +55,7 @@ class ETradeClient:
         self.timeout = timeout or settings.ETRADE_API_TIMEOUT
         self.referer = referer or settings.ETRADE_API_REFERER
         self.user_agent = user_agent or settings.ETRADE_API_USER_AGENT
+        self.ssl_context = ssl._create_unverified_context()  # noqa: S323, SLF001
 
     def get_registration_info_by_tin(self, tin: str) -> dict[str, Any] | None:
         path = f"/Registration/GetRegistrationInfoByTin/{quote(tin)}/en"
@@ -75,8 +77,9 @@ class ETradeClient:
         return self._get_json(path)
 
     def _get_json(self, path: str) -> dict[str, Any] | None:
+        url = f"{self.base_url}{path}"
         request = Request(  # noqa: S310
-            url=f"{self.base_url}{path}",
+            url=url,
             headers={
                 "Accept": "application/json",
                 "Referer": self.referer,
@@ -85,10 +88,19 @@ class ETradeClient:
             method="GET",
         )
         try:
-            with urlopen(request, timeout=self.timeout) as response:  # noqa: S310
+            with urlopen(  # noqa: S310
+                request,
+                timeout=self.timeout,
+                context=self.ssl_context,
+            ) as response:
                 payload = json.loads(response.read().decode("utf-8"))
-        except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as exc:
-            logger.warning("eTrade lookup failed: %s", exc)
+        except (
+            HTTPError,
+            URLError,
+            TimeoutError,
+            json.JSONDecodeError,
+        ) as exc:
+            logger.warning("eTrade lookup failed for %s: %s", url, exc)
             return None
 
         if isinstance(payload, dict):
