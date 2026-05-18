@@ -1,3 +1,7 @@
+[build-system]
+build-backend = "setuptools.build_meta"
+requires = [ "setuptools>=80" ]
+
 [project]
 name = "core"
 version = "0.1.0"
@@ -15,6 +19,7 @@ classifiers = [
 dependencies = [
   "argon2-cffi==25.1.0",
   "celery==5.6.3",
+  "certifi>=2026.4.22",
   "collectfasta==3.3.3",
   "crispy-bootstrap5==2026.3",
   "django==6.0.4",
@@ -41,6 +46,7 @@ dependencies = [
   "uvicorn[standard]==0.46.0",
   "uvicorn-worker==0.4.0",
 ]
+scripts.backend-api-docs-mcp = "core.mcp_backend_docs.server:main"
 
 [dependency-groups]
 dev = [
@@ -67,6 +73,9 @@ dev = [
   "watchfiles==1.1.1",
   "werkzeug[watchdog]==3.1.8",
 ]
+
+[tool.setuptools]
+packages.find.include = [ "config*", "core*" ]
 
 [tool.ruff]
 # Exclude a variety of commonly ignored directories.

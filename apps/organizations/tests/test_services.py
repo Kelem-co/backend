@@ -1,8 +1,18 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+from typing import Self
+from urllib.error import URLError
+
 from organizations.models import Organization
 from organizations.services.etrade import ETradeClient
 from organizations.services.etrade import verify_organization_registration
+
+if TYPE_CHECKING:
+    from ssl import SSLContext
+    from types import TracebackType
+
+    import pytest
 
 
 class StubETradeClient(ETradeClient):
@@ -169,3 +179,83 @@ class TestVerifyOrganizationRegistration:
         assert result.organization_status == Organization.Status.PENDING
         assert result.requires_manual_verification is True
         assert result.verification_failure_reason == "etrade_service_unavailable"
+
+
+class _FakeResponse:
+    def __init__(self, payload: bytes) -> None:
+        self.payload = payload
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        return None
+
+    def read(self) -> bytes:
+        return self.payload
+
+
+class TestETradeClient:
+    def test_get_registration_info_uses_expected_request(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        timeout = 5
+        recorded: dict[str, object] = {}
+
+        def fake_urlopen(
+            request,
+            timeout: int,
+            context: SSLContext,
+        ) -> _FakeResponse:
+            recorded["url"] = request.full_url
+            recorded["timeout"] = timeout
+            recorded["context"] = context
+            return _FakeResponse(b'{"Tin": "1234567890"}')
+
+        monkeypatch.setattr("organizations.services.etrade.urlopen", fake_urlopen)
+
+        client = ETradeClient(
+            base_url="https://etrade.gov.et/api",
+            timeout=timeout,
+        )
+
+        payload = client.get_registration_info_by_tin("1234567890")
+
+        assert payload == {"Tin": "1234567890"}
+        assert (
+            recorded["url"]
+            == "https://etrade.gov.et/api/Registration/GetRegistrationInfoByTin/1234567890/en"
+        )
+        assert recorded["timeout"] == timeout
+        assert recorded["context"] is client.ssl_context
+
+    def test_get_registration_info_returns_none_on_ssl_error(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        error_message = (
+            "certificate verify failed: unable to get local issuer certificate"
+        )
+
+        def fake_urlopen(
+            request,
+            timeout: int,
+            context: SSLContext,
+        ) -> _FakeResponse:
+            raise URLError(error_message)
+
+        monkeypatch.setattr("organizations.services.etrade.urlopen", fake_urlopen)
+
+        client = ETradeClient()
+
+        payload = client.get_registration_info_by_tin("1234567890")
+
+        assert payload is None
+        assert "eTrade lookup failed for" in caplog.text

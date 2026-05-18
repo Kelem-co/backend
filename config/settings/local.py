@@ -13,7 +13,12 @@ SECRET_KEY = env(
     default="CBE9Ipus3hIZnaFUBIeMcefkT4vTEHhHbGXiZ0qjwvU2gcGaYAZWyhmWgA3vdj3J",
 )
 # https://docs.djangoproject.com/en/dev/ref/settings/#allowed-hosts
-ALLOWED_HOSTS = ["localhost", "0.0.0.0", "127.0.0.1"]  # noqa: S104
+ALLOWED_HOSTS = [
+    "localhost",
+    "0.0.0.0",  # noqa: S104
+    "127.0.0.1",
+    "emphasis-kills-sheep-close.trycloudflare.com",
+]
 
 # CACHES
 # ------------------------------------------------------------------------------
@@ -67,3 +72,4 @@ INSTALLED_APPS += ["django_extensions"]
 CELERY_TASK_EAGER_PROPAGATES = True
 # Your stuff...
 # ------------------------------------------------------------------------------
+CORS_ALLOW_ALL_ORIGINS = True

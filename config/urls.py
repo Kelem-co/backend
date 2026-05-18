@@ -9,6 +9,8 @@ from django.views.generic import TemplateView
 from drf_spectacular.views import SpectacularAPIView
 from drf_spectacular.views import SpectacularSwaggerView
 
+from core.mcp_backend_docs.views import mcp_endpoint
+
 urlpatterns = [
     path("", TemplateView.as_view(template_name="pages/home.html"), name="home"),
     path(
@@ -35,6 +37,7 @@ urlpatterns += [
     # API base url
     path("api/", include("config.api_router")),
     path("api/schema/", SpectacularAPIView.as_view(), name="api-schema"),
+    path("api/mcp/", mcp_endpoint, name="backend-api-docs-mcp"),
     path(
         "api/docs/",
         SpectacularSwaggerView.as_view(url_name="api-schema"),
