@@ -17,7 +17,7 @@ ALLOWED_HOSTS = [
     "localhost",
     "0.0.0.0",  # noqa: S104
     "127.0.0.1",
-    "emphasis-kills-sheep-close.trycloudflare.com",
+    ".trycloudflare.com",
 ]
 
 # CACHES

@@ -91,3 +91,7 @@ class PasswordChangedConfirmationEmail(
     email.PasswordChangedConfirmationEmail,
 ):
     template_stem = "password_changed_confirmation"
+
+
+class BranchAdminInvitationEmail(AsyncMultipartDjoserEmail):
+    template_stem = "branch_admin_invitation"

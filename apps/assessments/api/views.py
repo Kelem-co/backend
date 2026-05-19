@@ -8,6 +8,9 @@ from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.filters import SearchFilter
+
+from drf_spectacular.utils import extend_schema, OpenApiParameter
+from drf_spectacular.types import OpenApiTypes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -95,6 +98,17 @@ class AssessmentViewSet(viewsets.ModelViewSet):
     # GET /assessments/by-section/?section=<id>[&task_type=][&status=]
     # ------------------------------------------------------------------
     @action(detail=False, methods=["get"], url_path="by-section")
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="section",
+                type=OpenApiTypes.UUID,
+                location=OpenApiParameter.QUERY,
+                description="Filter by section ID.",
+                required=True,
+            ),
+        ]
+    )
     def by_section(self, request):
         """All assessments for a given section across all subjects."""
         section_id = request.query_params.get("section")
@@ -112,6 +126,17 @@ class AssessmentViewSet(viewsets.ModelViewSet):
     # GET /assessments/by-teacher/?teacher=<id>[&task_type=][&status=]
     # ------------------------------------------------------------------
     @action(detail=False, methods=["get"], url_path="by-teacher")
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="teacher",
+                type=OpenApiTypes.UUID,
+                location=OpenApiParameter.QUERY,
+                description="Filter by teacher ID.",
+                required=True,
+            ),
+        ]
+    )
     def by_teacher(self, request):
         """All assessments created by/for a specific teacher."""
         teacher_id = request.query_params.get("teacher")

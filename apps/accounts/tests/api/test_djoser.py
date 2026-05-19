@@ -77,18 +77,37 @@ def test_user_signup_does_not_require_username(api_client: APIClient):
 
 
 @pytest.mark.django_db
+def test_user_signup_allows_role_selection(api_client: APIClient):
+    payload = {
+        "email": "org-owner@example.com",
+        "password": "strong-password-123",
+        "name": "Org Owner",
+        "role": User.Role.ORGANIZATION,
+    }
+
+    response = api_client.post("/auth/users/", payload, format="json")
+
+    assert response.status_code == HTTPStatus.CREATED
+    assert response.data["role"] == User.Role.ORGANIZATION
+
+    user = User.objects.get(email=payload["email"])
+    assert user.role == User.Role.ORGANIZATION
+
+
+@pytest.mark.django_db
 def test_user_signup_rejects_privileged_fields(api_client: APIClient):
     payload = {
         "email": "privileged@example.com",
         "password": "strong-password-123",
         "name": "Privileged User",
-        "role": User.Role.ORGANIZATION,
+        "is_superuser": True,
     }
 
     response = api_client.post("/auth/users/", payload, format="json")
 
     assert response.status_code == HTTPStatus.BAD_REQUEST
     error = response.data["errors"][0]
-    assert error["field"] == "role"
+    assert error["field"] == "is_superuser"
     assert error["detail"] == "This field may not be set during signup."
     assert not User.objects.filter(email=payload["email"]).exists()
+

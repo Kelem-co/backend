@@ -16,6 +16,7 @@ class UserSerializer(serializers.ModelSerializer[User]):
             "email",
             "phone_number",
             "address",
+            "role",
             "password",
             "verified_at",
             "created_at",
@@ -63,7 +64,6 @@ class UserUpdateSerializer(serializers.ModelSerializer[User]):
 class UserCreateSerializer(DjoserUserCreateSerializer):
     forbidden_signup_fields = frozenset(
         {
-            "role",
             "verified_at",
             "is_staff",
             "is_superuser",
@@ -84,6 +84,7 @@ class UserCreateSerializer(DjoserUserCreateSerializer):
             "grandfather_name",
             "phone_number",
             "address",
+            "role",
         )
 
     def validate(self, attrs):
