@@ -11,7 +11,7 @@ from assessments.api.views import AssessmentViewSet
 from attendance.api.views import AttendanceReasonViewSet
 from attendance.api.views import AttendanceSummaryViewSet
 from attendance.api.views import AttendanceViewSet
-from branches.api.views import BranchAdminViewSet
+from branches.api.views import BranchAdminViewSet, BranchAdminInviteView, BranchAdminCompleteInvitationView
 from branches.api.views import BranchViewSet
 from django.conf import settings
 from django.urls import include
@@ -85,4 +85,9 @@ router.register(
 router.register("announcements", AnnouncementViewSet, basename="announcement")
 
 app_name = "api"
-urlpatterns = [*router.urls, path("", include("media.api.urls"))]
+urlpatterns = [
+    path("branch-admins/invite/", BranchAdminInviteView.as_view(), name="branch-admin-invite"),
+    path("branch-admins/complete-invitation/", BranchAdminCompleteInvitationView.as_view(), name="branch-admin-complete-invitation"),
+    *router.urls,
+    path("", include("media.api.urls")),
+]

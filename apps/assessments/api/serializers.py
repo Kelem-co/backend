@@ -91,7 +91,7 @@ class AssessmentReadSerializer(AssessmentSerializer):
             "result_count",
         ]
 
-    def get_result_count(self, obj):
+    def get_result_count(self, obj) -> int:
         return obj.results.count()
 
 
@@ -199,7 +199,7 @@ class AssessmentResultReadSerializer(AssessmentResultSerializer):
             "graded_by_name",
         ]
 
-    def get_student_name(self, obj):
+    def get_student_name(self, obj) -> str:
         return f"{obj.student.first_name} {obj.student.last_name}"
 
 
