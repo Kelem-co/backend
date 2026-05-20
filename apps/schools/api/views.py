@@ -2,6 +2,7 @@ from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 from schools.api.serializers import SchoolSerializer
 from schools.models import School
+from django_filters.rest_framework import DjangoFilterBackend
 
 
 class SchoolViewSet(viewsets.ModelViewSet):
@@ -12,6 +13,8 @@ class SchoolViewSet(viewsets.ModelViewSet):
     )
     serializer_class = SchoolSerializer
     permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["organization", "branches"]
 
     def get_queryset(self):
         if getattr(self, "swagger_fake_view", False):
