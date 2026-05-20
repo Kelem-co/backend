@@ -8,9 +8,13 @@ from teachers.models import HomeroomAssignment
 from teachers.models import Teacher
 from teachers.models import TeacherQualification
 from teachers.models import TeacherSubjectAssignment
+from branches.models import Branch
 
 from core.api.access import scope_queryset_for_user
+from core.api.access import user_can_access_branch
+from teachers.services.bulk_import import TeacherBulkImportService
 
+from .serializers import BulkImportSerializer
 from .serializers import HomeroomAssignmentReadSerializer
 from .serializers import HomeroomAssignmentSerializer
 from .serializers import SectionTeacherScheduleSerializer
@@ -68,7 +72,62 @@ class TeacherViewSet(viewsets.ModelViewSet):
         return qs
 
     def get_serializer_class(self):
+        if self.action == "bulk_import":
+            return BulkImportSerializer
         return TeacherSerializer
+
+    # ------------------------------------------------------------------
+    # POST /teachers/bulk-import/
+    # ------------------------------------------------------------------
+    @action(detail=False, methods=["post"], url_path="bulk-import")
+    def bulk_import(self, request):
+        """Bulk import teachers from CSV/Excel."""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        organization_id = serializer.validated_data["organization"]
+        branch_id = serializer.validated_data["branch"]
+        uploaded_file = serializer.validated_data["file"]
+
+        # Permission check: Check if user has access to this branch
+        try:
+            branch = Branch.objects.select_related("organization").get(
+                id=branch_id,
+                organization_id=organization_id,
+            )
+        except Branch.DoesNotExist:
+            return Response(
+                {"detail": "Branch not found or does not belong to organization."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not user_can_access_branch(request.user, branch):
+            return Response(
+                {"detail": "You do not have permission to import to this branch."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        file_content = uploaded_file.read()
+        file_name = uploaded_file.name
+
+        service = TeacherBulkImportService(
+            file_content=file_content,
+            file_name=file_name,
+            organization_id=organization_id,
+            branch_id=branch_id,
+        )
+        success, errors = service.run()
+
+        if not success:
+            return Response(
+                {"errors": errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response(
+            {"detail": "Teachers imported successfully."},
+            status=status.HTTP_201_CREATED,
+        )
 
     # ------------------------------------------------------------------
     # /teachers/<id>/qualifications/

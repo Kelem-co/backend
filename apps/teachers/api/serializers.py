@@ -258,3 +258,10 @@ class HomeroomAssignmentReadSerializer(HomeroomAssignmentSerializer):
             "branch_name",
             "organization_name",
         ]
+
+
+class BulkImportSerializer(serializers.Serializer):
+    file = serializers.FileField()
+    organization = serializers.UUIDField()
+    branch = serializers.UUIDField()
+
