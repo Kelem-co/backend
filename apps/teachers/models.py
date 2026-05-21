@@ -29,6 +29,8 @@ class Teacher(UUIDModel, TimeStampedModel):
         _("Employee ID"),
         max_length=50,
         unique=True,
+        null=True,
+        blank=True,
     )
     bio = models.TextField(_("Bio"), blank=True)
     specialization = models.CharField(
@@ -36,7 +38,7 @@ class Teacher(UUIDModel, TimeStampedModel):
         max_length=255,
         blank=True,
     )
-    joining_date = models.DateField(_("Joining Date"))
+    joining_date = models.DateField(_("Joining Date"), null=True, blank=True)
 
     class Meta:
         verbose_name = _("Teacher")
