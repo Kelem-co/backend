@@ -33,9 +33,10 @@ class TestTeacherBulkImport:
 
         data = {
             "name": ["John Doe", "Jane Smith"],
+            "father_name": ["Richard Doe", "William Smith"],
+            "grandfather_name": ["Robert Doe", "James Smith"],
             "email": ["johndoe@example.com", "janesmith@example.com"],
-            "employee_id": ["EMP101", "EMP102"],
-            "joining_date": ["2025-01-15", "2025-02-01"],
+            "phone_number": ["+251911111111", "+251922222222"],
             "specialization": ["Math", "Physics"],
             "bio": ["Math teacher bio", "Physics teacher bio"],
         }
@@ -60,17 +61,18 @@ class TestTeacherBulkImport:
 
         # Verify DB entries
         assert User.objects.filter(email="johndoe@example.com").exists()
-        assert Teacher.objects.filter(employee_id="EMP101").exists()
-        assert Teacher.objects.filter(employee_id="EMP102").exists()
+        assert Teacher.objects.filter(user__email="johndoe@example.com").exists()
+        assert Teacher.objects.filter(user__email="janesmith@example.com").exists()
 
     def test_teacher_bulk_import_excel_success(self, api_client, user, organization, branch):
         api_client.force_authenticate(user=user)
 
         data = {
             "name": ["Robert Doe"],
+            "father_name": ["Richard Doe"],
+            "grandfather_name": ["William Doe"],
             "email": ["robert@example.com"],
-            "employee_id": ["EMP201"],
-            "joining_date": ["2025-03-01"],
+            "phone_number": ["+251933333333"],
             "specialization": ["Biology"],
             "bio": ["Biology teacher"],
         }
@@ -93,7 +95,7 @@ class TestTeacherBulkImport:
         assert response.status_code == status.HTTP_201_CREATED
 
         assert User.objects.filter(email="robert@example.com").exists()
-        assert Teacher.objects.filter(employee_id="EMP201").exists()
+        assert Teacher.objects.filter(user__email="robert@example.com").exists()
 
     def test_teacher_bulk_import_validation_error(self, api_client, user, organization, branch):
         api_client.force_authenticate(user=user)
@@ -103,9 +105,10 @@ class TestTeacherBulkImport:
 
         data = {
             "name": ["John Doe", "Jane Smith"],
+            "father_name": ["Richard Doe", "William Smith"],
+            "grandfather_name": ["Robert Doe", "James Smith"],
             "email": ["duplicate@example.com", "janesmith2@example.com"],  # duplicate email
-            "employee_id": ["EMP301", "EMP301"],  # duplicate employee id inside sheet
-            "joining_date": ["invalid-date", "2025-02-01"],
+            "phone_number": ["+251944444444", "+251944444444"],  # duplicate phone inside sheet
         }
         df = pd.DataFrame(data)
         csv_buf = io.StringIO()

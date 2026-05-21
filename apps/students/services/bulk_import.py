@@ -34,7 +34,7 @@ class ParentBulkImportService:
         # Normalize columns
         df.columns = [str(c).strip().lower() for c in df.columns]
 
-        required_columns = ["name", "email", "phone_number"]
+        required_columns = ["name", "father_name", "grandfather_name", "phone_number"]
         missing_columns = [col for col in required_columns if col not in df.columns]
         if missing_columns:
             return False, [{
@@ -44,7 +44,7 @@ class ParentBulkImportService:
                 }
             }]
 
-        df = df.where(pd.notnull(df), None)
+        df = df.fillna("")
 
         try:
             with transaction.atomic():
@@ -80,9 +80,13 @@ class ParentBulkImportService:
                     if not name:
                         row_errors["name"] = ["Name is required."]
 
-                    if not email:
-                        row_errors["email"] = ["Email is required."]
-                    else:
+                    if not father_name:
+                        row_errors["father_name"] = ["Father name is required."]
+                        
+                    if not grandfather_name:
+                        row_errors["grandfather_name"] = ["Grandfather name is required."]
+
+                    if email:
                         try:
                             validate_email(email)
                         except ValidationError:
@@ -105,36 +109,35 @@ class ParentBulkImportService:
                         self.errors.append({"row": row_num, "errors": row_errors})
                         continue
 
-                    # Check if User already exists
-                    existing_user = User.objects.filter(email__iexact=email).first()
+                    # Check if User already exists by phone number
+                    existing_user = User.objects.filter(phone_number=phone_number).first()
                     
                     if existing_user:
                         if existing_user.role != User.Role.PARENT:
-                            row_errors["email"] = [f"A user with this email exists but is not a Parent (role: {existing_user.role})."]
+                            row_errors["phone_number"] = [f"A user with this phone number exists but is not a Parent (role: {existing_user.role})."]
                             self.errors.append({"row": row_num, "errors": row_errors})
                             continue
                         
-                        # Existing parent user - update phone if needed and reuse profile
-                        if existing_user.phone_number != phone_number:
-                            # Verify new phone is not used by another user
-                            if User.objects.exclude(id=existing_user.id).filter(phone_number=phone_number).exists():
-                                row_errors["phone_number"] = ["This phone number is already registered to another user."]
+                        # Existing parent user - update email if provided and different
+                        if email and existing_user.email != email:
+                            if User.objects.exclude(id=existing_user.id).filter(email__iexact=email).exists():
+                                row_errors["email"] = ["This email is already registered to another user."]
                                 self.errors.append({"row": row_num, "errors": row_errors})
                                 continue
-                            existing_user.phone_number = phone_number
+                            existing_user.email = email
                             existing_user.save()
                         
                         parent_profile, _ = Parent.objects.get_or_create(user=existing_user)
                     else:
-                        # Ensure phone is not registered to another user
-                        if User.objects.filter(phone_number=phone_number).exists():
-                            row_errors["phone_number"] = ["This phone number is already registered to another user."]
+                        # Ensure email is not registered to another user if provided
+                        if email and User.objects.filter(email__iexact=email).exists():
+                            row_errors["email"] = ["This email is already registered to another user."]
                             self.errors.append({"row": row_num, "errors": row_errors})
                             continue
 
                         # Create brand new Parent User
                         existing_user = User.objects.create_user(
-                            email=email,
+                            email=email if email else None,
                             name=name,
                             father_name=father_name,
                             grandfather_name=grandfather_name,
@@ -202,7 +205,7 @@ class StudentBulkImportService:
         # Normalize columns
         df.columns = [str(c).strip().lower() for c in df.columns]
 
-        required_columns = ["first_name", "last_name", "gender", "date_of_birth", "roll_no", "section_name", "admission_date"]
+        required_columns = ["first_name", "last_name", "gender", "date_of_birth"]
         missing_columns = [col for col in required_columns if col not in df.columns]
         if missing_columns:
             return False, [{
@@ -212,7 +215,7 @@ class StudentBulkImportService:
                 }
             }]
 
-        df = df.where(pd.notnull(df), None)
+        df = df.fillna("")
 
         try:
             with transaction.atomic():
@@ -266,8 +269,9 @@ class StudentBulkImportService:
 
                     # Validate Admission Date
                     admission_date = None
-                    if admission_date_raw is None:
-                        row_errors["admission_date"] = ["Admission date is required."]
+                    if admission_date_raw is None or str(admission_date_raw).strip() == "":
+                        from datetime import date
+                        admission_date = date.today()
                     else:
                         try:
                             admission_date = pd.to_datetime(admission_date_raw).date()
@@ -276,9 +280,7 @@ class StudentBulkImportService:
 
                     # Resolve Section
                     section = None
-                    if not section_name:
-                        row_errors["section_name"] = ["Section name is required."]
-                    else:
+                    if section_name:
                         sections_qs = Section.objects.filter(branch=branch, name__iexact=section_name)
                         if grade_name:
                             sections_qs = sections_qs.filter(grade__name__iexact=grade_name)
@@ -290,24 +292,29 @@ class StudentBulkImportService:
                                 err_msg += f" for Grade '{grade_name}'"
                             row_errors["section_name"] = [err_msg + "."]
                         elif count > 1:
-                            row_errors["section_name"] = [f"Multiple sections found named '{section_name}'. Please specify 'grade_name' to disambiguate."]
+                            if not grade_name:
+                                # Ignore section assignment if multiple matches and no grade provided
+                                section = None
+                            else:
+                                row_errors["section_name"] = [f"Multiple sections found named '{section_name}'. Please specify 'grade_name' to disambiguate."]
                         else:
                             section = sections_qs.first()
 
                     # Validate Roll Number within Section/Branch
                     if not roll_no:
-                        row_errors["roll_no"] = ["Roll number is required."]
+                        import uuid
+                        roll_no = f"STU-{uuid.uuid4().hex[:8].upper()}"
+                        
+                    # Sheet duplicates
+                    roll_key = (section.id if section else None, roll_no.lower())
+                    if roll_key in seen_roll_numbers:
+                        row_errors["roll_no"] = ["Duplicate roll number in this section within the sheet."]
                     else:
-                        # Sheet duplicates
-                        roll_key = (section.id if section else None, roll_no.lower())
-                        if roll_key in seen_roll_numbers:
-                            row_errors["roll_no"] = ["Duplicate roll number in this section within the sheet."]
-                        else:
-                            seen_roll_numbers.add(roll_key)
+                        seen_roll_numbers.add(roll_key)
 
-                            # DB duplicates
-                            if section and Student.objects.filter(branch=branch, current_section=section, roll_no__iexact=roll_no).exists():
-                                row_errors["roll_no"] = ["Roll number already exists in this section."]
+                        # DB duplicates
+                        if section and Student.objects.filter(branch=branch, current_section=section, roll_no__iexact=roll_no).exists():
+                            row_errors["roll_no"] = ["Roll number already exists in this section."]
 
                     # Parse Parent links if provided
                     parent_links_to_create = []

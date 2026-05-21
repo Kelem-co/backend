@@ -35,7 +35,7 @@ class TeacherBulkImportService:
         # Trim column names
         df.columns = [str(c).strip().lower() for c in df.columns]
 
-        required_columns = ["name", "email", "employee_id", "joining_date"]
+        required_columns = ["name", "father_name", "grandfather_name", "email", "phone_number"]
         missing_columns = [col for col in required_columns if col not in df.columns]
         if missing_columns:
             return False, [{
@@ -46,7 +46,7 @@ class TeacherBulkImportService:
             }]
 
         # Replace NaN values with None/empty string for easier processing
-        df = df.where(pd.notnull(df), None)
+        df = df.fillna("")
 
         try:
             with transaction.atomic():
@@ -105,7 +105,8 @@ class TeacherBulkImportService:
 
                     # Validate Employee ID
                     if not employee_id:
-                        row_errors["employee_id"] = ["Employee ID is required."]
+                        import uuid
+                        employee_id = f"EMP-{uuid.uuid4().hex[:8].upper()}"
                     else:
                         if employee_id.lower() in seen_employee_ids:
                             row_errors["employee_id"] = ["Duplicate Employee ID in the sheet."]
@@ -118,16 +119,27 @@ class TeacherBulkImportService:
 
                     # Validate Joining Date
                     joining_date = None
-                    if joining_date_raw is None:
-                        row_errors["joining_date"] = ["Joining date is required."]
+                    if joining_date_raw is None or str(joining_date_raw).strip() == "":
+                        from datetime import date
+                        joining_date = date.today()
                     else:
                         try:
                             joining_date = pd.to_datetime(joining_date_raw).date()
                         except Exception:
                             row_errors["joining_date"] = ["Invalid date format. Use YYYY-MM-DD."]
 
-                    # Validate Phone Number uniqueness if provided
-                    if phone_number:
+                    # Validate Father Name
+                    if not father_name:
+                        row_errors["father_name"] = ["Father name is required."]
+
+                    # Validate Grandfather Name
+                    if not grandfather_name:
+                        row_errors["grandfather_name"] = ["Grandfather name is required."]
+
+                    # Validate Phone Number
+                    if not phone_number:
+                        row_errors["phone_number"] = ["Phone number is required."]
+                    else:
                         if User.objects.filter(phone_number=phone_number).exists():
                             row_errors["phone_number"] = ["A user with this phone number already exists."]
 

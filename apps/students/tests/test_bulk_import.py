@@ -44,6 +44,8 @@ class TestStudentAndParentBulkImport:
 
         data = {
             "name": ["Parent One", "Parent Two"],
+            "father_name": ["FParent One", "FParent Two"],
+            "grandfather_name": ["GParent One", "GParent Two"],
             "email": ["parent1@example.com", "parent2@example.com"],
             "phone_number": ["+251911111111", "+251911222222"],
             "secondary_phone_number": ["", "+251911333333"],
@@ -84,10 +86,10 @@ class TestStudentAndParentBulkImport:
             "last_name": ["Green", "Brown"],
             "gender": ["FEMALE", "MALE"],
             "date_of_birth": ["2015-05-20", "2016-06-18"],
-            "roll_no": ["R501", "R502"],
-            "section_name": ["Section A", "Section A"],
-            "grade_name": ["Grade 9", "Grade 9"],
-            "admission_date": ["2023-09-01", "2023-09-01"],
+            "roll_no": ["R501", ""],
+            "section_name": ["Section A", ""],
+            "grade_name": ["Grade 9", ""],
+            "admission_date": ["2023-09-01", ""],
             "parent_emails": ["parent@example.com", ""],
             "relationship_types": ["MOTHER", ""],
         }
@@ -110,7 +112,7 @@ class TestStudentAndParentBulkImport:
         assert response.status_code == status.HTTP_201_CREATED
 
         assert Student.objects.filter(roll_no="R501", current_section=section).exists()
-        assert Student.objects.filter(roll_no="R502", current_section=section).exists()
+        assert Student.objects.filter(first_name="Bob", current_section=None).exists()
         
         # Verify parent links
         student_alice = Student.objects.get(roll_no="R501")
