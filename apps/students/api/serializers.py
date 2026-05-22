@@ -307,4 +307,3 @@ class BulkImportSerializer(serializers.Serializer):
     file = serializers.FileField()
     organization = serializers.UUIDField()
     branch = serializers.UUIDField()
-

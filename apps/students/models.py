@@ -105,7 +105,7 @@ class Student(UUIDModel, TimeStampedModel):
     last_name = models.CharField(_("Last Name"), max_length=255)
     gender = models.CharField(_("Gender"), max_length=10, choices=Gender.choices)
     date_of_birth = models.DateField(_("Date of Birth"))
-    roll_no = models.CharField(_("Roll Number"), max_length=50, null=True, blank=True)
+    roll_no = models.CharField(_("Roll Number"), max_length=50, default="", blank=True)
     current_section = models.ForeignKey(
         "academics.Section",
         on_delete=models.PROTECT,

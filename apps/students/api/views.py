@@ -1,3 +1,4 @@
+from branches.models import Branch
 from drf_spectacular.utils import OpenApiParameter
 from drf_spectacular.utils import OpenApiTypes
 from drf_spectacular.utils import extend_schema
@@ -11,13 +12,12 @@ from rest_framework.response import Response
 from students.models import Parent
 from students.models import ParentStudentLink
 from students.models import Student
-from branches.models import Branch
 
 from core.api.access import scope_queryset_for_user
-from core.api.access import user_can_access_parent
 from core.api.access import user_can_access_branch
-from students.services.bulk_import import ParentBulkImportService
-from students.services.bulk_import import StudentBulkImportService
+from core.api.access import user_can_access_parent
+from core.models import ImportJob
+from core.tasks import process_bulk_import
 
 from .serializers import BulkImportSerializer
 from .serializers import ParentReadSerializer
@@ -273,26 +273,19 @@ class StudentViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        file_content = uploaded_file.read()
-        file_name = uploaded_file.name
-
-        service = StudentBulkImportService(
-            file_content=file_content,
-            file_name=file_name,
+        import_job = ImportJob.objects.create(
+            file=uploaded_file,
+            module="students",
             organization_id=organization_id,
             branch_id=branch_id,
+            created_by=request.user,
         )
-        success, errors = service.run()
 
-        if not success:
-            return Response(
-                {"errors": errors},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        process_bulk_import.delay(str(import_job.id))
 
         return Response(
-            {"detail": "Students imported successfully."},
-            status=status.HTTP_201_CREATED,
+            {"task_id": str(import_job.id), "detail": "Bulk import process started."},
+            status=status.HTTP_202_ACCEPTED,
         )
 
     # ------------------------------------------------------------------
@@ -441,26 +434,19 @@ class ParentViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        file_content = uploaded_file.read()
-        file_name = uploaded_file.name
-
-        service = ParentBulkImportService(
-            file_content=file_content,
-            file_name=file_name,
+        import_job = ImportJob.objects.create(
+            file=uploaded_file,
+            module="parents",
             organization_id=organization_id,
             branch_id=branch_id,
+            created_by=request.user,
         )
-        success, errors = service.run()
 
-        if not success:
-            return Response(
-                {"errors": errors},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        process_bulk_import.delay(str(import_job.id))
 
         return Response(
-            {"detail": "Parents imported successfully."},
-            status=status.HTTP_201_CREATED,
+            {"task_id": str(import_job.id), "detail": "Bulk import process started."},
+            status=status.HTTP_202_ACCEPTED,
         )
 
     @action(detail=False, methods=["get"], url_path="by-branch")

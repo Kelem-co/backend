@@ -1,14 +1,18 @@
 import io
-import pytest
+
 import pandas as pd
-from django.core.files.uploadedfile import SimpleUploadedFile
-from rest_framework import status
-from rest_framework.test import APIClient
+import pytest
+from accounts.models import User
 from accounts.tests.factories import UserFactory
 from branches.tests.factories import BranchFactory
+from django.core.files.uploadedfile import SimpleUploadedFile
 from organizations.tests.factories import OrganizationFactory
+from rest_framework import status
+from rest_framework.test import APIClient
 from teachers.models import Teacher
-from accounts.models import User
+
+from core.models import ImportJob
+
 
 @pytest.mark.django_db
 class TestTeacherBulkImport:
@@ -28,7 +32,13 @@ class TestTeacherBulkImport:
     def branch(self, organization):
         return BranchFactory(school__organization=organization)
 
-    def test_teacher_bulk_import_csv_success(self, api_client, user, organization, branch):
+    def test_teacher_bulk_import_csv_success(
+        self,
+        api_client,
+        user,
+        organization,
+        branch,
+    ):
         api_client.force_authenticate(user=user)
 
         data = {
@@ -46,7 +56,7 @@ class TestTeacherBulkImport:
         uploaded_file = SimpleUploadedFile(
             "teachers.csv",
             csv_buf.getvalue().encode("utf-8"),
-            content_type="text/csv"
+            content_type="text/csv",
         )
 
         payload = {
@@ -55,16 +65,26 @@ class TestTeacherBulkImport:
             "file": uploaded_file,
         }
 
-        response = api_client.post("/api/teachers/bulk-import/", payload, format="multipart")
-        assert response.status_code == status.HTTP_201_CREATED
-        assert response.data["detail"] == "Teachers imported successfully."
+        response = api_client.post(
+            "/api/teachers/bulk-import/",
+            payload,
+            format="multipart",
+        )
+        assert response.status_code == status.HTTP_202_ACCEPTED
+        assert response.data["detail"] == "Bulk import process started."
 
         # Verify DB entries
         assert User.objects.filter(email="johndoe@example.com").exists()
         assert Teacher.objects.filter(user__email="johndoe@example.com").exists()
         assert Teacher.objects.filter(user__email="janesmith@example.com").exists()
 
-    def test_teacher_bulk_import_excel_success(self, api_client, user, organization, branch):
+    def test_teacher_bulk_import_excel_success(
+        self,
+        api_client,
+        user,
+        organization,
+        branch,
+    ):
         api_client.force_authenticate(user=user)
 
         data = {
@@ -82,7 +102,7 @@ class TestTeacherBulkImport:
         uploaded_file = SimpleUploadedFile(
             "teachers.xlsx",
             excel_buf.getvalue(),
-            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 
         payload = {
@@ -91,24 +111,40 @@ class TestTeacherBulkImport:
             "file": uploaded_file,
         }
 
-        response = api_client.post("/api/teachers/bulk-import/", payload, format="multipart")
-        assert response.status_code == status.HTTP_201_CREATED
+        response = api_client.post(
+            "/api/teachers/bulk-import/",
+            payload,
+            format="multipart",
+        )
+        assert response.status_code == status.HTTP_202_ACCEPTED
 
         assert User.objects.filter(email="robert@example.com").exists()
         assert Teacher.objects.filter(user__email="robert@example.com").exists()
 
-    def test_teacher_bulk_import_validation_error(self, api_client, user, organization, branch):
+    def test_teacher_bulk_import_validation_error(
+        self,
+        api_client,
+        user,
+        organization,
+        branch,
+    ):
         api_client.force_authenticate(user=user)
 
-        # First add a user with the email we will try to import to cause validation conflict
+        # Create a conflicting user so the import hits email validation.
         UserFactory(email="duplicate@example.com")
 
         data = {
             "name": ["John Doe", "Jane Smith"],
             "father_name": ["Richard Doe", "William Smith"],
             "grandfather_name": ["Robert Doe", "James Smith"],
-            "email": ["duplicate@example.com", "janesmith2@example.com"],  # duplicate email
-            "phone_number": ["+251944444444", "+251944444444"],  # duplicate phone inside sheet
+            "email": [
+                "duplicate@example.com",
+                "janesmith2@example.com",
+            ],  # duplicate email
+            "phone_number": [
+                "+251944444444",
+                "+251944444444",
+            ],  # duplicate phone inside sheet
         }
         df = pd.DataFrame(data)
         csv_buf = io.StringIO()
@@ -116,7 +152,7 @@ class TestTeacherBulkImport:
         uploaded_file = SimpleUploadedFile(
             "teachers_error.csv",
             csv_buf.getvalue().encode("utf-8"),
-            content_type="text/csv"
+            content_type="text/csv",
         )
 
         payload = {
@@ -125,9 +161,20 @@ class TestTeacherBulkImport:
             "file": uploaded_file,
         }
 
-        response = api_client.post("/api/teachers/bulk-import/", payload, format="multipart")
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "errors" in response.data
-        
-        # Verify transaction rolled back (Jane Smith should not be created since row 1 had errors)
+        response = api_client.post(
+            "/api/teachers/bulk-import/",
+            payload,
+            format="multipart",
+        )
+        assert response.status_code == status.HTTP_202_ACCEPTED
+
+        # Verify the failed row caused the transaction to roll back.
+        assert not User.objects.filter(email="janesmith2@example.com").exists()
+
+        # Verify the import job failed
+        job = ImportJob.objects.last()
+        assert job.status == ImportJob.Status.FAILED
+        assert job.errors is not None
+
+        # Verify the failed row caused the transaction to roll back.
         assert not User.objects.filter(email="janesmith2@example.com").exists()

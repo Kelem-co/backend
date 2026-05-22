@@ -1,12 +1,16 @@
 import io
+import uuid
+from datetime import datetime
+
 import pandas as pd
-from django.db import transaction
+from accounts.models import User
+from branches.models import Branch
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
-from accounts.models import User
-from teachers.models import Teacher
-from branches.models import Branch
+from django.db import transaction
 from organizations.models import Organization
+from teachers.models import Teacher
+
 
 class TeacherBulkImportService:
     def __init__(self, file_content, file_name, organization_id, branch_id):
@@ -16,34 +20,55 @@ class TeacherBulkImportService:
         self.branch_id = branch_id
         self.errors = []  # List of dicts: {"row": int, "errors": dict}
 
-    def run(self) -> tuple[bool, list[dict]]:
+    def run(self) -> tuple[bool, list[dict]]:  # noqa: C901, PLR0911, PLR0912, PLR0915
         # 1. Parse File using Pandas
         try:
-            if self.file_name.endswith('.csv'):
+            if self.file_name.endswith(".csv"):
                 # CSV files can be parsed from bytes via string decoding
-                data = io.StringIO(self.file_content.decode('utf-8'))
+                data = io.StringIO(self.file_content.decode("utf-8"))
                 df = pd.read_csv(data)
-            elif self.file_name.endswith(('.xls', '.xlsx')):
+            elif self.file_name.endswith((".xls", ".xlsx")):
                 # Excel files can be parsed from bytes via BytesIO
                 data = io.BytesIO(self.file_content)
                 df = pd.read_excel(data)
             else:
-                return False, [{"row": 0, "errors": {"file": ["Unsupported file format. Please upload CSV or Excel."]}}]
-        except Exception as e:
-            return False, [{"row": 0, "errors": {"file": [f"Failed to parse file: {str(e)}"]}}]
+                return False, [
+                    {
+                        "row": 0,
+                        "errors": {
+                            "file": [
+                                "Unsupported file format. Please upload CSV or Excel.",
+                            ],
+                        },
+                    },
+                ]
+        except Exception as e:  # noqa: BLE001
+            return False, [
+                {"row": 0, "errors": {"file": [f"Failed to parse file: {e!s}"]}},
+            ]
 
         # Trim column names
         df.columns = [str(c).strip().lower() for c in df.columns]
 
-        required_columns = ["name", "father_name", "grandfather_name", "email", "phone_number"]
+        required_columns = [
+            "name",
+            "father_name",
+            "grandfather_name",
+            "email",
+            "phone_number",
+        ]
         missing_columns = [col for col in required_columns if col not in df.columns]
         if missing_columns:
-            return False, [{
-                "row": 0,
-                "errors": {
-                    "columns": [f"Missing required columns: {', '.join(missing_columns)}"]
-                }
-            }]
+            return False, [
+                {
+                    "row": 0,
+                    "errors": {
+                        "columns": [
+                            f"Missing required columns: {', '.join(missing_columns)}",
+                        ],
+                    },
+                },
+            ]
 
         # Replace NaN values with None/empty string for easier processing
         df = df.fillna("")
@@ -54,12 +79,29 @@ class TeacherBulkImportService:
                 try:
                     org = Organization.objects.get(id=self.organization_id)
                 except Organization.DoesNotExist:
-                    return False, [{"row": 0, "errors": {"organization": ["Organization not found."]}}]
+                    return False, [
+                        {
+                            "row": 0,
+                            "errors": {"organization": ["Organization not found."]},
+                        },
+                    ]
 
                 try:
                     branch = Branch.objects.get(id=self.branch_id, organization=org)
                 except Branch.DoesNotExist:
-                    return False, [{"row": 0, "errors": {"branch": ["Branch not found or does not belong to organization."]}}]
+                    return False, [
+                        {
+                            "row": 0,
+                            "errors": {
+                                "branch": [
+                                    (
+                                        "Branch not found or does not belong to "
+                                        "organization."
+                                    ),
+                                ],
+                            },
+                        },
+                    ]
 
                 # Temporary memory tracking to prevent duplicates within the same sheet
                 seen_emails = set()
@@ -70,16 +112,48 @@ class TeacherBulkImportService:
                     row_errors = {}
 
                     # Extract values
-                    name = str(row.get("name")).strip() if row.get("name") is not None else ""
-                    email = str(row.get("email")).strip() if row.get("email") is not None else ""
-                    employee_id = str(row.get("employee_id")).strip() if row.get("employee_id") is not None else ""
+                    name = (
+                        str(row.get("name")).strip()
+                        if row.get("name") is not None
+                        else ""
+                    )
+                    email = (
+                        str(row.get("email")).strip()
+                        if row.get("email") is not None
+                        else ""
+                    )
+                    employee_id = (
+                        str(row.get("employee_id")).strip()
+                        if row.get("employee_id") is not None
+                        else ""
+                    )
                     joining_date_raw = row.get("joining_date")
-                    
-                    father_name = str(row.get("father_name")).strip() if row.get("father_name") is not None else ""
-                    grandfather_name = str(row.get("grandfather_name")).strip() if row.get("grandfather_name") is not None else ""
-                    phone_number = str(row.get("phone_number")).strip() if row.get("phone_number") is not None else ""
-                    specialization = str(row.get("specialization")).strip() if row.get("specialization") is not None else ""
-                    bio = str(row.get("bio")).strip() if row.get("bio") is not None else ""
+
+                    father_name = (
+                        str(row.get("father_name")).strip()
+                        if row.get("father_name") is not None
+                        else ""
+                    )
+                    grandfather_name = (
+                        str(row.get("grandfather_name")).strip()
+                        if row.get("grandfather_name") is not None
+                        else ""
+                    )
+                    phone_number = (
+                        str(row.get("phone_number")).strip()
+                        if row.get("phone_number") is not None
+                        else ""
+                    )
+                    specialization = (
+                        str(row.get("specialization")).strip()
+                        if row.get("specialization") is not None
+                        else ""
+                    )
+                    bio = (
+                        str(row.get("bio")).strip()
+                        if row.get("bio") is not None
+                        else ""
+                    )
 
                     # Validate Name
                     if not name:
@@ -93,40 +167,47 @@ class TeacherBulkImportService:
                             validate_email(email)
                         except ValidationError:
                             row_errors["email"] = ["Invalid email format."]
-                        
+
                         if email.lower() in seen_emails:
                             row_errors["email"] = ["Duplicate email in the sheet."]
                         else:
                             seen_emails.add(email.lower())
-                            
+
                             # Check database uniqueness
                             if User.objects.filter(email__iexact=email).exists():
-                                row_errors["email"] = ["A user with this email already exists."]
+                                row_errors["email"] = [
+                                    "A user with this email already exists.",
+                                ]
 
                     # Validate Employee ID
                     if not employee_id:
-                        import uuid
                         employee_id = f"EMP-{uuid.uuid4().hex[:8].upper()}"
+                    elif employee_id.lower() in seen_employee_ids:
+                        row_errors["employee_id"] = [
+                            "Duplicate Employee ID in the sheet.",
+                        ]
                     else:
-                        if employee_id.lower() in seen_employee_ids:
-                            row_errors["employee_id"] = ["Duplicate Employee ID in the sheet."]
-                        else:
-                            seen_employee_ids.add(employee_id.lower())
-                            
-                            # Check database uniqueness
-                            if Teacher.objects.filter(employee_id__iexact=employee_id).exists():
-                                row_errors["employee_id"] = ["Teacher with this Employee ID already exists."]
+                        seen_employee_ids.add(employee_id.lower())
+
+                        # Check database uniqueness
+                        if Teacher.objects.filter(
+                            employee_id__iexact=employee_id,
+                        ).exists():
+                            row_errors["employee_id"] = [
+                                "Teacher with this Employee ID already exists.",
+                            ]
 
                     # Validate Joining Date
                     joining_date = None
                     if joining_date_raw is None or str(joining_date_raw).strip() == "":
-                        from datetime import date
-                        joining_date = date.today()
+                        joining_date = datetime.datetime.now(tz=datetime.UTC).date()
                     else:
                         try:
                             joining_date = pd.to_datetime(joining_date_raw).date()
-                        except Exception:
-                            row_errors["joining_date"] = ["Invalid date format. Use YYYY-MM-DD."]
+                        except Exception:  # noqa: BLE001
+                            row_errors["joining_date"] = [
+                                "Invalid date format. Use YYYY-MM-DD.",
+                            ]
 
                     # Validate Father Name
                     if not father_name:
@@ -134,14 +215,17 @@ class TeacherBulkImportService:
 
                     # Validate Grandfather Name
                     if not grandfather_name:
-                        row_errors["grandfather_name"] = ["Grandfather name is required."]
+                        row_errors["grandfather_name"] = [
+                            "Grandfather name is required.",
+                        ]
 
                     # Validate Phone Number
                     if not phone_number:
                         row_errors["phone_number"] = ["Phone number is required."]
-                    else:
-                        if User.objects.filter(phone_number=phone_number).exists():
-                            row_errors["phone_number"] = ["A user with this phone number already exists."]
+                    elif User.objects.filter(phone_number=phone_number).exists():
+                        row_errors["phone_number"] = [
+                            "A user with this phone number already exists.",
+                        ]
 
                     # If errors in this row, skip creation and log errors
                     if row_errors:
@@ -168,16 +252,17 @@ class TeacherBulkImportService:
                         employee_id=employee_id,
                         joining_date=joining_date,
                         specialization=specialization,
-                        bio=bio
+                        bio=bio,
                     )
 
                 if self.errors:
-                    # Rollback transaction
-                    raise transaction.Rollback()
+                    raise transaction.Rollback  # noqa: TRY301
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             if not self.errors:
-                self.errors.append({"row": 0, "errors": {"server": [f"Internal error: {str(e)}"]}})
+                self.errors.append(
+                    {"row": 0, "errors": {"server": [f"Internal error: {e!s}"]}},
+                )
             return False, self.errors
 
         if self.errors:

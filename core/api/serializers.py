@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
+from core.models import ImportJob
+
 
 class ApiErrorSerializer(serializers.Serializer):
     code = serializers.CharField()
@@ -16,3 +18,18 @@ class ApiErrorResponseSerializer(serializers.Serializer):
 class EmptyDataResponseSerializer(serializers.Serializer):
     data = serializers.JSONField(allow_null=True)
     message = serializers.CharField()
+
+
+class ImportJobSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ImportJob
+        fields = [
+            "id",
+            "status",
+            "task_id",
+            "progress",
+            "errors",
+            "module",
+            "created_at",
+            "updated_at",
+        ]

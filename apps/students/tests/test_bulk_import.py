@@ -1,15 +1,20 @@
 import io
-import pytest
+
 import pandas as pd
-from django.core.files.uploadedfile import SimpleUploadedFile
-from rest_framework import status
-from rest_framework.test import APIClient
-from academics.tests.factories import GradeFactory, SectionFactory
+import pytest
+from academics.tests.factories import GradeFactory
+from academics.tests.factories import SectionFactory
+from accounts.models import User
 from accounts.tests.factories import UserFactory
 from branches.tests.factories import BranchFactory
+from django.core.files.uploadedfile import SimpleUploadedFile
 from organizations.tests.factories import OrganizationFactory
-from students.models import Student, Parent, ParentStudentLink
-from accounts.models import User
+from rest_framework import status
+from rest_framework.test import APIClient
+from students.models import Parent
+from students.models import ParentStudentLink
+from students.models import Student
+
 
 @pytest.mark.django_db
 class TestStudentAndParentBulkImport:
@@ -36,7 +41,7 @@ class TestStudentAndParentBulkImport:
             organization=organization,
             branch=branch,
             grade=grade,
-            name="Section A"
+            name="Section A",
         )
 
     def test_parent_bulk_import_success(self, api_client, user, organization, branch):
@@ -57,7 +62,7 @@ class TestStudentAndParentBulkImport:
         uploaded_file = SimpleUploadedFile(
             "parents.csv",
             csv_buf.getvalue().encode("utf-8"),
-            content_type="text/csv"
+            content_type="text/csv",
         )
 
         payload = {
@@ -66,13 +71,27 @@ class TestStudentAndParentBulkImport:
             "file": uploaded_file,
         }
 
-        response = api_client.post("/api/parents/bulk-import/", payload, format="multipart")
-        assert response.status_code == status.HTTP_201_CREATED
+        response = api_client.post(
+            "/api/parents/bulk-import/",
+            payload,
+            format="multipart",
+        )
+        assert response.status_code == status.HTTP_202_ACCEPTED
 
-        assert User.objects.filter(email="parent1@example.com", role=User.Role.PARENT).exists()
+        assert User.objects.filter(
+            email="parent1@example.com",
+            role=User.Role.PARENT,
+        ).exists()
         assert Parent.objects.filter(user__email="parent1@example.com").exists()
 
-    def test_student_bulk_import_success(self, api_client, user, organization, branch, section):
+    def test_student_bulk_import_success(
+        self,
+        api_client,
+        user,
+        organization,
+        branch,
+        section,
+    ):
         api_client.force_authenticate(user=user)
 
         # Pre-create parent to test linking
@@ -99,7 +118,7 @@ class TestStudentAndParentBulkImport:
         uploaded_file = SimpleUploadedFile(
             "students.csv",
             csv_buf.getvalue().encode("utf-8"),
-            content_type="text/csv"
+            content_type="text/csv",
         )
 
         payload = {
@@ -108,12 +127,20 @@ class TestStudentAndParentBulkImport:
             "file": uploaded_file,
         }
 
-        response = api_client.post("/api/students/bulk-import/", payload, format="multipart")
-        assert response.status_code == status.HTTP_201_CREATED
+        response = api_client.post(
+            "/api/students/bulk-import/",
+            payload,
+            format="multipart",
+        )
+        assert response.status_code == status.HTTP_202_ACCEPTED
 
         assert Student.objects.filter(roll_no="R501", current_section=section).exists()
         assert Student.objects.filter(first_name="Bob", current_section=None).exists()
-        
+
         # Verify parent links
         student_alice = Student.objects.get(roll_no="R501")
-        assert ParentStudentLink.objects.filter(student=student_alice, parent=parent_profile, relationship_type="MOTHER").exists()
+        assert ParentStudentLink.objects.filter(
+            student=student_alice,
+            parent=parent_profile,
+            relationship_type="MOTHER",
+        ).exists()
