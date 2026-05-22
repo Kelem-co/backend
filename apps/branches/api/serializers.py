@@ -1,7 +1,7 @@
+from accounts.models import User
 from branches.models import Branch
 from branches.models import BranchAdmin
 from rest_framework import serializers
-from accounts.models import User
 from rest_framework.exceptions import ValidationError
 
 
@@ -126,9 +126,11 @@ class BranchAdminInviteSerializer(serializers.Serializer):
     role_title = serializers.CharField(max_length=100)
     branch = serializers.PrimaryKeyRelatedField(queryset=Branch.objects.all())
 
+    EMAIL_VALIDATION_ERROR_MESSAGE = "A user with this email already exists."
+
     def validate_email(self, value):
         if User.objects.filter(email=value).exists():
-            raise serializers.ValidationError("A user with this email already exists.")
+            raise serializers.ValidationError(self.EMAIL_VALIDATION_ERROR_MESSAGE)
         return value
 
     def validate(self, attrs):
@@ -136,7 +138,9 @@ class BranchAdminInviteSerializer(serializers.Serializer):
         branch = attrs.get("branch")
         if request and branch:
             if branch.organization.owner_id != request.user.id:
-                raise serializers.ValidationError({"branch": "You can only manage branches in your organizations."})
+                raise serializers.ValidationError(
+                    {"branch": "You can only manage branches in your organizations."},
+                )
         return attrs
 
 

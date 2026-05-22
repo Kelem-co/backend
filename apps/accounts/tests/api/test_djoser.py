@@ -110,4 +110,3 @@ def test_user_signup_rejects_privileged_fields(api_client: APIClient):
     assert error["field"] == "is_superuser"
     assert error["detail"] == "This field may not be set during signup."
     assert not User.objects.filter(email=payload["email"]).exists()
-

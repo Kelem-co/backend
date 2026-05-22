@@ -45,6 +45,7 @@ class TestUserViewSet:
             "email": user.email,
             "phone_number": user.phone_number,
             "address": user.address,
+            "role": user.role,
             "verified_at": user.verified_at,
             "created_at": user.created_at.isoformat().replace("+00:00", "Z"),
             "updated_at": user.updated_at.isoformat().replace("+00:00", "Z"),

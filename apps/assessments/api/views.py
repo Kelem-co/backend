@@ -3,14 +3,14 @@ from assessments.models import AssessmentResult
 from django.db import IntegrityError
 from django.db import transaction
 from django.db.models import Q
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter
+from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.filters import SearchFilter
-
-from drf_spectacular.utils import extend_schema, OpenApiParameter
-from drf_spectacular.types import OpenApiTypes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -107,7 +107,7 @@ class AssessmentViewSet(viewsets.ModelViewSet):
                 description="Filter by section ID.",
                 required=True,
             ),
-        ]
+        ],
     )
     def by_section(self, request):
         """All assessments for a given section across all subjects."""
@@ -135,7 +135,7 @@ class AssessmentViewSet(viewsets.ModelViewSet):
                 description="Filter by teacher ID.",
                 required=True,
             ),
-        ]
+        ],
     )
     def by_teacher(self, request):
         """All assessments created by/for a specific teacher."""
