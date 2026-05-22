@@ -67,7 +67,7 @@ class TestStudentAndParentBulkImport:
         }
 
         response = api_client.post("/api/parents/bulk-import/", payload, format="multipart")
-        assert response.status_code == status.HTTP_201_CREATED
+        assert response.status_code == status.HTTP_202_ACCEPTED
 
         assert User.objects.filter(email="parent1@example.com", role=User.Role.PARENT).exists()
         assert Parent.objects.filter(user__email="parent1@example.com").exists()
@@ -109,7 +109,7 @@ class TestStudentAndParentBulkImport:
         }
 
         response = api_client.post("/api/students/bulk-import/", payload, format="multipart")
-        assert response.status_code == status.HTTP_201_CREATED
+        assert response.status_code == status.HTTP_202_ACCEPTED
 
         assert Student.objects.filter(roll_no="R501", current_section=section).exists()
         assert Student.objects.filter(first_name="Bob", current_section=None).exists()

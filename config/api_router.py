@@ -26,6 +26,7 @@ from teachers.api.views import HomeroomAssignmentViewSet
 from teachers.api.views import TeacherQualificationViewSet
 from teachers.api.views import TeacherSubjectAssignmentViewSet
 from teachers.api.views import TeacherViewSet
+from core.api.views import ImportStatusView
 
 router = DefaultRouter() if settings.DEBUG else SimpleRouter()
 
@@ -86,6 +87,8 @@ app_name = "api"
 urlpatterns = [
     path("branch-admins/invite/", BranchAdminInviteView.as_view(), name="branch-admin-invite"),
     path("branch-admins/complete-invitation/", BranchAdminCompleteInvitationView.as_view(), name="branch-admin-complete-invitation"),
+    path("import-status/<str:task_id>/", ImportStatusView.as_view(), name="import-status"),
     *router.urls,
+
     path("", include("media.api.urls")),
 ]

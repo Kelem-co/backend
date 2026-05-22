@@ -14,10 +14,27 @@ sys.path.append(str(BASE_DIR / "apps"))
 APPS_DIR = BASE_DIR / "core"
 env = environ.Env()
 
+import os
+
 READ_DOT_ENV_FILE = env.bool("DJANGO_READ_DOT_ENV_FILE", default=False)
 if READ_DOT_ENV_FILE:
     # OS environment variables take precedence over variables from .env
     env.read_env(str(BASE_DIR / ".env"))
+
+if "DATABASE_URL" not in os.environ:
+    postgres_user = os.environ.get("POSTGRES_USER")
+    postgres_password = os.environ.get("POSTGRES_PASSWORD")
+    postgres_host = os.environ.get("POSTGRES_HOST")
+    postgres_port = os.environ.get("POSTGRES_PORT")
+    postgres_db = os.environ.get("POSTGRES_DB")
+    if postgres_user and postgres_db:
+        auth = postgres_user
+        if postgres_password:
+            auth += f":{postgres_password}"
+        host_port = postgres_host or "localhost"
+        if postgres_port:
+            host_port += f":{postgres_port}"
+        os.environ["DATABASE_URL"] = f"postgres://{auth}@{host_port}/{postgres_db}"
 
 # GENERAL
 # ------------------------------------------------------------------------------

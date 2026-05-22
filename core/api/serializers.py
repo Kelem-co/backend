@@ -16,3 +16,10 @@ class ApiErrorResponseSerializer(serializers.Serializer):
 class EmptyDataResponseSerializer(serializers.Serializer):
     data = serializers.JSONField(allow_null=True)
     message = serializers.CharField()
+
+
+class ImportJobSerializer(serializers.ModelSerializer):
+    class Meta:
+        from core.models import ImportJob
+        model = ImportJob
+        fields = ["id", "status", "task_id", "progress", "errors", "module", "created_at", "updated_at"]

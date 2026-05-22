@@ -12,7 +12,8 @@ from branches.models import Branch
 
 from core.api.access import scope_queryset_for_user
 from core.api.access import user_can_access_branch
-from teachers.services.bulk_import import TeacherBulkImportService
+from core.models import ImportJob
+from core.tasks import process_bulk_import
 
 from .serializers import BulkImportSerializer
 from .serializers import HomeroomAssignmentReadSerializer
@@ -107,27 +108,21 @@ class TeacherViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        file_content = uploaded_file.read()
-        file_name = uploaded_file.name
-
-        service = TeacherBulkImportService(
-            file_content=file_content,
-            file_name=file_name,
+        import_job = ImportJob.objects.create(
+            file=uploaded_file,
+            module="teachers",
             organization_id=organization_id,
             branch_id=branch_id,
+            created_by=request.user
         )
-        success, errors = service.run()
 
-        if not success:
-            return Response(
-                {"errors": errors},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        process_bulk_import.delay(str(import_job.id))
 
         return Response(
-            {"detail": "Teachers imported successfully."},
-            status=status.HTTP_201_CREATED,
+            {"task_id": str(import_job.id), "detail": "Bulk import process started."},
+            status=status.HTTP_202_ACCEPTED,
         )
+
 
     # ------------------------------------------------------------------
     # /teachers/<id>/qualifications/

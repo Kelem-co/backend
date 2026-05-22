@@ -56,8 +56,8 @@ class TestTeacherBulkImport:
         }
 
         response = api_client.post("/api/teachers/bulk-import/", payload, format="multipart")
-        assert response.status_code == status.HTTP_201_CREATED
-        assert response.data["detail"] == "Teachers imported successfully."
+        assert response.status_code == status.HTTP_202_ACCEPTED
+        assert response.data["detail"] == "Bulk import process started."
 
         # Verify DB entries
         assert User.objects.filter(email="johndoe@example.com").exists()
@@ -92,7 +92,7 @@ class TestTeacherBulkImport:
         }
 
         response = api_client.post("/api/teachers/bulk-import/", payload, format="multipart")
-        assert response.status_code == status.HTTP_201_CREATED
+        assert response.status_code == status.HTTP_202_ACCEPTED
 
         assert User.objects.filter(email="robert@example.com").exists()
         assert Teacher.objects.filter(user__email="robert@example.com").exists()
@@ -126,8 +126,16 @@ class TestTeacherBulkImport:
         }
 
         response = api_client.post("/api/teachers/bulk-import/", payload, format="multipart")
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "errors" in response.data
+        assert response.status_code == status.HTTP_202_ACCEPTED
+        
+        # Verify transaction rolled back (Jane Smith should not be created since row 1 had errors)
+        assert not User.objects.filter(email="janesmith2@example.com").exists()
+        
+        # Verify the import job failed
+        from core.models import ImportJob
+        job = ImportJob.objects.last()
+        assert job.status == ImportJob.Status.FAILED
+        assert job.errors is not None
         
         # Verify transaction rolled back (Jane Smith should not be created since row 1 had errors)
         assert not User.objects.filter(email="janesmith2@example.com").exists()
