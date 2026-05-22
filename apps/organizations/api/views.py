@@ -1,3 +1,4 @@
+from django_filters.rest_framework import DjangoFilterBackend
 from organizations.api.serializers import OrganizationSerializer
 from organizations.models import Organization
 from organizations.services.organization_creation import (
@@ -7,7 +8,6 @@ from rest_framework import status
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from django_filters.rest_framework import DjangoFilterBackend
 
 
 class OrganizationViewSet(viewsets.ModelViewSet):
@@ -15,7 +15,14 @@ class OrganizationViewSet(viewsets.ModelViewSet):
     serializer_class = OrganizationSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ["status", "verification_status", "name", "trade_name", "tin_number", "license_no"]
+    filterset_fields = [
+        "status",
+        "verification_status",
+        "name",
+        "trade_name",
+        "tin_number",
+        "license_no",
+    ]
 
     def get_queryset(self):
         if getattr(self, "swagger_fake_view", False):

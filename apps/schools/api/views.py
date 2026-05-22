@@ -1,8 +1,8 @@
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 from schools.api.serializers import SchoolSerializer
 from schools.models import School
-from django_filters.rest_framework import DjangoFilterBackend
 
 
 class SchoolViewSet(viewsets.ModelViewSet):
