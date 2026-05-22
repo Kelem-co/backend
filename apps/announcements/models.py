@@ -1,8 +1,10 @@
+from academics.models import Grade
+from academics.models import Section
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
-from core.models import TimeStampedModel, UUIDModel
-from academics.models import Grade, Section
+from core.models import TimeStampedModel
+from core.models import UUIDModel
 
 
 class Announcement(UUIDModel, TimeStampedModel):
@@ -30,14 +32,27 @@ class Announcement(UUIDModel, TimeStampedModel):
     )
     subject = models.CharField(_("Subject"), max_length=255)
     message = models.TextField(_("Message"))
-    attachment = models.FileField(_("Attachment"), upload_to="announcements/attachments/", null=True, blank=True)
+    attachment = models.ForeignKey(
+        "media.MediaFile",
+        on_delete=models.SET_NULL,
+        related_name="announcement_attachments",
+        null=True,
+        blank=True,
+        verbose_name=_("Attachment"),
+    )
     scheduled_at = models.DateTimeField(_("Scheduled At"), null=True, blank=True)
     is_urgent = models.BooleanField(_("Is Urgent"), default=False)
     status = models.CharField(
-        _("Status"), max_length=20, choices=StatusChoices.choices, default=StatusChoices.DRAFT
+        _("Status"),
+        max_length=20,
+        choices=StatusChoices.choices,
+        default=StatusChoices.DRAFT,
     )
     target_roles = models.CharField(
-        _("Target Roles"), max_length=20, choices=TargetRoleChoices.choices, default=TargetRoleChoices.BOTH
+        _("Target Roles"),
+        max_length=20,
+        choices=TargetRoleChoices.choices,
+        default=TargetRoleChoices.BOTH,
     )
 
     class Meta:
@@ -53,17 +68,18 @@ class AnnouncementGrade(UUIDModel, TimeStampedModel):
     """
     Junction table for targeting specific Grades with an announcement.
     """
+
     announcement = models.ForeignKey(
         Announcement,
         on_delete=models.CASCADE,
         related_name="targeted_grades",
-        verbose_name=_("Announcement")
+        verbose_name=_("Announcement"),
     )
     grade = models.ForeignKey(
         Grade,
         on_delete=models.CASCADE,
         related_name="announcements",
-        verbose_name=_("Grade")
+        verbose_name=_("Grade"),
     )
 
     class Meta:
@@ -79,17 +95,18 @@ class AnnouncementSection(UUIDModel, TimeStampedModel):
     """
     Junction table for targeting specific Sections with an announcement.
     """
+
     announcement = models.ForeignKey(
         Announcement,
         on_delete=models.CASCADE,
         related_name="targeted_sections",
-        verbose_name=_("Announcement")
+        verbose_name=_("Announcement"),
     )
     section = models.ForeignKey(
         Section,
         on_delete=models.CASCADE,
         related_name="announcements",
-        verbose_name=_("Section")
+        verbose_name=_("Section"),
     )
 
     class Meta:

@@ -1,11 +1,15 @@
 import pytest
+from academics.tests.factories import GradeFactory
+from academics.tests.factories import SectionFactory
 from accounts.tests.factories import UserFactory
 from branches.tests.factories import BranchFactory
 from organizations.tests.factories import OrganizationFactory
-from academics.tests.factories import GradeFactory, SectionFactory
-from announcements.tests.factories import AnnouncementFactory
 from rest_framework import status
 from rest_framework.test import APIClient
+
+from media.models import StatusChoices
+from media.tests.factories import MediaFileFactory
+
 
 @pytest.mark.django_db
 class TestAnnouncementsAPI:
@@ -27,9 +31,10 @@ class TestAnnouncementsAPI:
 
     def test_announcement_crud(self, api_client, user, organization, branch):
         api_client.force_authenticate(user=user)
-        
+
         grade = GradeFactory(organization=organization, branch=branch)
         section = SectionFactory(organization=organization, branch=branch, grade=grade)
+        attachment = MediaFileFactory(uploaded_by=user, status=StatusChoices.UPLOADED)
 
         # Create
         data = {
@@ -37,11 +42,12 @@ class TestAnnouncementsAPI:
             "branch": str(branch.id),
             "subject": "Test Subject",
             "message": "Test Message",
+            "attachment": str(attachment.id),
             "is_urgent": False,
             "status": "DRAFT",
             "target_roles": "PARENTS",
             "targeted_grades": [str(grade.id)],
-            "targeted_sections": [str(section.id)]
+            "targeted_sections": [str(section.id)],
         }
         response = api_client.post("/api/announcements/", data)
         assert response.status_code == status.HTTP_201_CREATED, response.data
@@ -56,16 +62,25 @@ class TestAnnouncementsAPI:
         response = api_client.get(f"/api/announcements/{announcement_id}/")
         assert response.status_code == status.HTTP_200_OK
         assert response.data["subject"] == "Test Subject"
+        assert str(response.data["attachment"]) == str(attachment.id)
         assert len(response.data["targeted_grades"]) == 1
         assert len(response.data["targeted_sections"]) == 1
 
         # Update
+        updated_attachment = MediaFileFactory(
+            uploaded_by=user,
+            status=StatusChoices.UPLOADED,
+        )
         response = api_client.patch(
             f"/api/announcements/{announcement_id}/",
-            {"subject": "Test Subject Updated"}
+            {
+                "subject": "Test Subject Updated",
+                "attachment": str(updated_attachment.id),
+            },
         )
         assert response.status_code == status.HTTP_200_OK
         assert response.data["subject"] == "Test Subject Updated"
+        assert str(response.data["attachment"]) == str(updated_attachment.id)
 
         # Delete
         response = api_client.delete(f"/api/announcements/{announcement_id}/")
@@ -73,20 +88,79 @@ class TestAnnouncementsAPI:
 
     def test_get_targeting_criteria(self, api_client, user, organization, branch):
         api_client.force_authenticate(user=user)
-        
-        grade = GradeFactory(organization=organization, branch=branch)
-        section = SectionFactory(organization=organization, branch=branch, grade=grade)
-        
+
         # Test custom action
         response = api_client.get("/api/announcements/get_targeting_criteria/")
         assert response.status_code == status.HTTP_200_OK
-        
+
         assert "grades" in response.data
         assert "sections" in response.data
-        
-        # Depending on scope filtering rules, it might or might not return them 
+
+        # Depending on scope filtering rules, it might or might not return them
         # (if UserFactory doesn't automatically give permissions to the branch).
         # Assuming the user has access to the branch's data, we assert lengths.
-        # This assert depends on whether the user has roles, but at least the endpoint works.
+        # This assert depends on whether the user has roles, but at least the endpoint works. # noqa: E501
         assert isinstance(response.data["grades"], list)
         assert isinstance(response.data["sections"], list)
+
+    def test_create_rejects_attachment_owned_by_another_user(
+        self,
+        api_client,
+        user,
+        organization,
+        branch,
+    ):
+        api_client.force_authenticate(user=user)
+        attachment = MediaFileFactory(
+            uploaded_by=UserFactory(),
+            status=StatusChoices.UPLOADED,
+        )
+
+        response = api_client.post(
+            "/api/announcements/",
+            {
+                "organization": str(organization.id),
+                "branch": str(branch.id),
+                "subject": "Test Subject",
+                "message": "Test Message",
+                "attachment": str(attachment.id),
+                "status": "DRAFT",
+                "target_roles": "PARENTS",
+            },
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "Selected media file does not belong to the current user." in str(
+            response.data,
+        )
+
+    def test_create_rejects_attachment_that_is_not_uploaded(
+        self,
+        api_client,
+        user,
+        organization,
+        branch,
+    ):
+        api_client.force_authenticate(user=user)
+        attachment = MediaFileFactory(
+            uploaded_by=user,
+            status=StatusChoices.PENDING,
+        )
+
+        response = api_client.post(
+            "/api/announcements/",
+            {
+                "organization": str(organization.id),
+                "branch": str(branch.id),
+                "subject": "Test Subject",
+                "message": "Test Message",
+                "attachment": str(attachment.id),
+                "status": "DRAFT",
+                "target_roles": "PARENTS",
+            },
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "Selected media file has not finished uploading." in str(response.data)
