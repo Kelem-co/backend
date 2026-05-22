@@ -6,8 +6,11 @@ from announcements.models import AnnouncementSection
 from django.db import transaction
 from rest_framework import serializers
 
+from media.api.serializers import MediaFileReferenceField
+
 
 class AnnouncementSerializer(serializers.ModelSerializer):
+    attachment = MediaFileReferenceField(required=False, allow_null=True)
     targeted_grades = serializers.PrimaryKeyRelatedField(
         queryset=Grade.objects.all(),
         many=True,
@@ -53,7 +56,7 @@ class AnnouncementSerializer(serializers.ModelSerializer):
             if grade.branch != branch:
                 raise serializers.ValidationError(
                     {
-                        "targeted_grades": f"Grade {grade.name} does not belong to the selected branch.",
+                        "targeted_grades": f"Grade {grade.name} does not belong to the selected branch.",  # noqa: E501
                     },
                 )
 
@@ -62,7 +65,7 @@ class AnnouncementSerializer(serializers.ModelSerializer):
             if section.branch != branch:
                 raise serializers.ValidationError(
                     {
-                        "targeted_sections": f"Section {section.name} does not belong to the selected branch.",
+                        "targeted_sections": f"Section {section.name} does not belong to the selected branch.",  # noqa: E501
                     },
                 )
 

@@ -4,12 +4,19 @@ from teachers.models import Teacher
 from teachers.models import TeacherQualification
 from teachers.models import TeacherSubjectAssignment
 
+from media.api.serializers import MediaFileReferenceField
+
 # ---------------------------------------------------------------------------
 # Qualification
 # ---------------------------------------------------------------------------
 
 
 class TeacherQualificationSerializer(serializers.ModelSerializer):
+    certificate_copy = MediaFileReferenceField(
+        required=False,
+        allow_null=True,
+    )
+
     class Meta:
         model = TeacherQualification
         fields = [

@@ -11,5 +11,6 @@ def send_priority_notifications(announcement_id):
     """
     # TODO: Implement Celery task for sending async notifications
     logger.info(
-        f"Triggered priority notifications for announcement ID: {announcement_id}",
+        "Triggered priority notifications for announcement ID: %s",
+        announcement_id,
     )

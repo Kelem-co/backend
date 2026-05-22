@@ -25,9 +25,11 @@ class School(UUIDModel, TimeStampedModel):
     country = models.CharField(_("Country"), max_length=100)
     contact_email = models.EmailField(_("Contact Email"))
     contact_phone = models.CharField(_("Contact Phone"), max_length=50)
-    logo = models.ImageField(
-        _("Logo"),
-        upload_to=school_logo_upload_path,
+    logo = models.ForeignKey(
+        "media.MediaFile",
+        verbose_name=_("Logo"),
+        on_delete=models.SET_NULL,
+        related_name="school_logo_files",
         blank=True,
         null=True,
     )

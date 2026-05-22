@@ -64,9 +64,11 @@ class TeacherQualification(UUIDModel, TimeStampedModel):
     institution = models.CharField(_("Institution"), max_length=255)
     field_of_study = models.CharField(_("Field of Study"), max_length=255)
     completion_date = models.DateField(_("Completion Date"))
-    certificate_copy = models.FileField(
-        _("Certificate Copy"),
-        upload_to="teachers/certificates/",
+    certificate_copy = models.ForeignKey(
+        "media.MediaFile",
+        verbose_name=_("Certificate Copy"),
+        on_delete=models.SET_NULL,
+        related_name="teacher_qualification_certificate_files",
         blank=True,
         null=True,
     )

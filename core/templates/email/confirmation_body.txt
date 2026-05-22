@@ -1,0 +1,10 @@
+Account confirmation on {{ site_name }}
+
+Your account on {{ site_name }} has been confirmed successfully.
+
+You can now sign in using your email address and password.
+
+{{ user.get_full_name|default:user.email }}
+{{ user.email }}
+
+The {{ site_name }} team

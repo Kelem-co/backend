@@ -32,11 +32,13 @@ class Announcement(UUIDModel, TimeStampedModel):
     )
     subject = models.CharField(_("Subject"), max_length=255)
     message = models.TextField(_("Message"))
-    attachment = models.FileField(
-        _("Attachment"),
-        upload_to="announcements/attachments/",
+    attachment = models.ForeignKey(
+        "media.MediaFile",
+        on_delete=models.SET_NULL,
+        related_name="announcement_attachments",
         null=True,
         blank=True,
+        verbose_name=_("Attachment"),
     )
     scheduled_at = models.DateTimeField(_("Scheduled At"), null=True, blank=True)
     is_urgent = models.BooleanField(_("Is Urgent"), default=False)

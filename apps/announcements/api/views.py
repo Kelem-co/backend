@@ -33,7 +33,7 @@ class AnnouncementViewSet(viewsets.ModelViewSet):
             return self.queryset.none()
 
         # Rule 2: Tenant isolation via branch_id
-        # Assuming the scope_queryset_for_user automatically scopes based on user's branch
+        # Assuming the scope_queryset_for_user automatically scopes based on user's branch # noqa: E501
         qs = scope_queryset_for_user(self.queryset, self.request.user)
 
         # Manual filtering
@@ -64,7 +64,7 @@ class AnnouncementViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["get"])
     def get_targeting_criteria(self, request):
         """
-        Returns the available Grades and Sections for the Admin’s branch.
+        Returns the available Grades and Sections for the Admin's branch.
         """
         user = request.user
 

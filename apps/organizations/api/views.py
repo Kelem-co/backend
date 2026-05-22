@@ -1,13 +1,28 @@
+from django_filters.rest_framework import DjangoFilterBackend
 from organizations.api.serializers import OrganizationSerializer
 from organizations.models import Organization
+from organizations.services.organization_creation import (
+    create_organization_with_verification,
+)
+from rest_framework import status
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 
 
 class OrganizationViewSet(viewsets.ModelViewSet):
-    queryset = Organization.objects.select_related("owner")
+    queryset = Organization.objects.select_related("owner", "business_license_image")
     serializer_class = OrganizationSerializer
     permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = [
+        "status",
+        "verification_status",
+        "name",
+        "trade_name",
+        "tin_number",
+        "license_no",
+    ]
 
     def get_queryset(self):
         if getattr(self, "swagger_fake_view", False):
@@ -15,5 +30,17 @@ class OrganizationViewSet(viewsets.ModelViewSet):
 
         return self.queryset.filter(owner=self.request.user)
 
-    def perform_create(self, serializer):
-        serializer.save(owner=self.request.user)
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        organization = create_organization_with_verification(
+            owner=request.user,
+            validated_data=dict(serializer.validated_data),
+        )
+        response_serializer = self.get_serializer(organization)
+        headers = self.get_success_headers(response_serializer.data)
+        return Response(
+            response_serializer.data,
+            status=status.HTTP_201_CREATED,
+            headers=headers,
+        )

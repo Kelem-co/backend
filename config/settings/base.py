@@ -86,6 +86,8 @@ THIRD_PARTY_APPS = [
     "corsheaders",
     "drf_spectacular",
     "django_seed",
+    "djoser",
+    "django_filters",
 ]
 
 LOCAL_APPS = [
@@ -101,6 +103,7 @@ LOCAL_APPS = [
     "assessments",
     "announcements",
     "core",
+    "media",
     # Your stuff: custom apps go here
 ]
 # https://docs.djangoproject.com/en/dev/ref/settings/#installed-apps
@@ -240,6 +243,39 @@ EMAIL_BACKEND = env(
 )
 # https://docs.djangoproject.com/en/dev/ref/settings/#email-timeout
 EMAIL_TIMEOUT = 5
+# https://docs.djangoproject.com/en/dev/ref/settings/#default-from-email
+DEFAULT_FROM_EMAIL = env(
+    "DJANGO_DEFAULT_FROM_EMAIL",
+    default="noreply@example.com",
+)
+# Frontend URL for generating activation/password reset links in emails
+# Used by Djoser email classes to generate ACTIVATION_URL and PASSWORD_RESET_CONFIRM_URL
+# Format: https://yourdomain.com (no trailing slash)
+FRONTEND_DOMAIN = env(
+    "FRONTEND_DOMAIN",
+    default="http://localhost:3000",
+)
+# Whether to use HTTPS in email links (useful for localhost:8000 but remote is https)
+FRONTEND_PROTOCOL = env(
+    "FRONTEND_PROTOCOL",
+    default="http" if DEBUG else "https",
+)
+
+# ETHIOPIA ETRADE VERIFICATION
+# ------------------------------------------------------------------------------
+ETRADE_API_BASE_URL = env(
+    "ETRADE_API_BASE_URL",
+    default="https://etrade.gov.et/api",
+)
+ETRADE_API_TIMEOUT = env.int("ETRADE_API_TIMEOUT", default=10)
+ETRADE_API_REFERER = env(
+    "ETRADE_API_REFERER",
+    default="https://etrade.gov.et/",
+)
+ETRADE_API_USER_AGENT = env(
+    "ETRADE_API_USER_AGENT",
+    default="Mozilla/5.0",
+)
 
 # ADMIN
 # ------------------------------------------------------------------------------
@@ -319,6 +355,7 @@ CELERY_WORKER_SEND_TASK_EVENTS = True
 CELERY_TASK_SEND_SENT_EVENT = True
 # https://docs.celeryq.dev/en/stable/userguide/configuration.html#worker-hijack-root-logger
 CELERY_WORKER_HIJACK_ROOT_LOGGER = False
+
 # django-allauth
 # ------------------------------------------------------------------------------
 ACCOUNT_ALLOW_REGISTRATION = env.bool("DJANGO_ACCOUNT_ALLOW_REGISTRATION", True)
@@ -342,28 +379,60 @@ SOCIALACCOUNT_FORMS = {"signup": "accounts.forms.UserSocialSignupForm"}
 # django-rest-framework - https://www.django-rest-framework.org/api-guide/settings/
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
         "rest_framework.authentication.SessionAuthentication",
-        "rest_framework.authentication.TokenAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "DEFAULT_FILTER_BACKENDS": ("django_filters.rest_framework.DjangoFilterBackend",),
     "PAGE_SIZE": 10,
+    "EXCEPTION_HANDLER": "core.api.exceptions.api_exception_handler",
+}
+
+SIMPLE_JWT = {
+    "AUTH_HEADER_TYPES": ("Bearer", "JWT"),
 }
 
 
 # django-cors-headers - https://github.com/adamchainz/django-cors-headers#setup
-CORS_URLS_REGEX = r"^/api/.*$"
-
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^/api/.*$",
+    r"^/auth/.*$",
+]
 # By Default swagger ui is available only to admin user(s). You can change permission classes to change that
 # See more configuration options at https://drf-spectacular.readthedocs.io/en/latest/settings.html#settings
 SPECTACULAR_SETTINGS = {
     "TITLE": "core API",
     "DESCRIPTION": "Documentation of API endpoints of core",
     "VERSION": "1.0.0",
-    "SERVE_PERMISSIONS": ["rest_framework.permissions.IsAdminUser"],
+    "SERVE_PERMISSIONS": ["rest_framework.permissions.AllowAny"],
     "SCHEMA_PATH_PREFIX": "/api/",
 }
+
+# Media Upload Settings
+# -----------------------------------------------------------------------
+MEDIA_UPLOAD_SETTINGS = {
+    "BUCKET_NAME": env("S3_BUCKET", default=""),
+    "REGION": env("S3_REGION", default=""),
+    "ENDPOINT_URL": env("S3_PUBLIC_ENDPOINT", default="")
+    or env("S3_ENDPOINT", default=""),
+    "INTERNAL_ENDPOINT_URL": env("S3_INTERNAL_ENDPOINT", default=""),
+    "PRESIGNED_URL_TTL": env.int("S3_PRESIGNED_URL_TTL", default=900),
+    "DOWNLOAD_URL_TTL": env.int("S3_DOWNLOAD_URL_TTL", default=86400),
+    "UPLOAD_TTL": env.int("S3_UPLOAD_TTL", default=3600),
+    "FINGERPRINT_WINDOW": env.int("S3_FINGERPRINT_WINDOW", default=3600),
+    "FILE_SIZE_LIMITS": {
+        "image/*": env.int("MEDIA_MAX_IMAGE_SIZE", default=10_000_000),
+        "video/*": env.int("MEDIA_MAX_VIDEO_SIZE", default=500_000_000),
+        "application/pdf": env.int("MEDIA_MAX_PDF_SIZE", default=50_000_000),
+        "default": env.int("MEDIA_MAX_DEFAULT_SIZE", default=100_000_000),
+    },
+}
+
+S3_ACCESS_KEY_ID = env("S3_ACCESS_KEY_ID", default="")
+S3_SECRET_ACCESS_KEY = env("S3_SECRET_ACCESS_KEY", default="")
+
 # Your stuff...
 # ------------------------------------------------------------------------------
 
@@ -379,3 +448,23 @@ def patched_make_aware(value, timezone_obj=None, is_dst=None):
 
 
 timezone.make_aware = patched_make_aware
+
+DJOSER = {
+    "TOKEN_MODEL": None,
+    "EMAIL_FRONTEND_DOMAIN": FRONTEND_DOMAIN,
+    "EMAIL_FRONTEND_PROTOCOL": FRONTEND_PROTOCOL,
+    "SERIALIZERS": {
+        "user_create": "accounts.api.serializers.UserCreateSerializer",
+    },
+    "SEND_ACTIVATION_EMAIL": True,
+    "SEND_CONFIRMATION_EMAIL": True,
+    "PASSWORD_CHANGED_EMAIL_CONFIRMATION": True,
+    "EMAIL": {
+        "activation": "accounts.email.ActivationEmail",
+        "confirmation": "accounts.email.ConfirmationEmail",
+        "password_reset": "accounts.email.PasswordResetEmail",
+        "password_changed_confirmation": "accounts.email.PasswordChangedConfirmationEmail",
+    },
+    "ACTIVATION_URL": "activate/{uid}/{token}",
+    "PASSWORD_RESET_CONFIRM_URL": "reset-password/{uid}/{token}",
+}

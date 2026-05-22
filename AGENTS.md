@@ -58,6 +58,8 @@ When working in this app, reuse the existing patterns in `models.py`, `forms.py`
 
 Tests are part of the normal workflow and should be updated with the code change.
 
+Run tests in the Docker environment by default. Do not use host-local pytest for normal verification in this repo unless the user explicitly asks for it or Docker is unavailable.
+
 - Prefer `docker compose -f docker-compose.local.yml run --rm django pytest` for the full test suite.
 - Prefer the narrowest useful `docker compose -f docker-compose.local.yml run --rm django pytest path/to/test_file.py` or `docker compose -f docker-compose.local.yml run --rm django pytest --filter ...` style invocation when the change is localized.
 - Use the existing `core/users/tests/` layout as the model for new app tests.
@@ -83,6 +85,7 @@ If you touch Python code, expect to format or lint according to the repo configu
 
 Use the repo’s existing commands instead of inventing new ones.
 
+- Use Docker-based commands by default for this repository, including focused test and verification runs.
 - Use `just` for common container and management tasks.
 - Use `just build`, `just up`, `just down`, `just logs`, and `just manage ...` when working with the Dockerized local environment.
 - Use `docker compose -f docker-compose.local.yml run --rm django uv run python manage.py createsuperuser` for superuser creation when needed.

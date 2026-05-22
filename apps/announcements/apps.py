@@ -6,4 +6,4 @@ class AnnouncementsConfig(AppConfig):
     name = "announcements"
 
     def ready(self):
-        import announcements.signals  # noqa
+        pass
