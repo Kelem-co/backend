@@ -1,3 +1,4 @@
+from django_filters.rest_framework import DjangoFilterBackend
 from organizations.api.serializers import OrganizationSerializer
 from organizations.models import Organization
 from organizations.services.organization_creation import (
@@ -13,6 +14,15 @@ class OrganizationViewSet(viewsets.ModelViewSet):
     queryset = Organization.objects.select_related("owner", "business_license_image")
     serializer_class = OrganizationSerializer
     permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = [
+        "status",
+        "verification_status",
+        "name",
+        "trade_name",
+        "tin_number",
+        "license_no",
+    ]
 
     def get_queryset(self):
         if getattr(self, "swagger_fake_view", False):
