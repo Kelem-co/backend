@@ -101,6 +101,7 @@ LOCAL_APPS = [
     "attendance",
     "analytics",
     "assessments",
+    "announcements",
     "core",
     "media",
     # Your stuff: custom apps go here

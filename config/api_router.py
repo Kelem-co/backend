@@ -5,6 +5,7 @@ from academics.api.views import SectionViewSet
 from academics.api.views import SubjectViewSet
 from accounts.api.views import UserViewSet
 from analytics.api.views import InterventionLogViewSet
+from announcements.api.views import AnnouncementViewSet
 from assessments.api.views import AssessmentResultViewSet
 from assessments.api.views import AssessmentViewSet
 from attendance.api.views import AttendanceReasonViewSet
@@ -81,6 +82,7 @@ router.register(
     AssessmentResultViewSet,
     basename="assessment-result",
 )
+router.register("announcements", AnnouncementViewSet, basename="announcement")
 
 app_name = "api"
 urlpatterns = [*router.urls, path("", include("media.api.urls"))]
