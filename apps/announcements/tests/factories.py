@@ -4,6 +4,7 @@ from branches.tests.factories import BranchFactory
 from factory.django import DjangoModelFactory
 from organizations.tests.factories import OrganizationFactory
 
+
 class AnnouncementFactory(DjangoModelFactory):
     organization = factory.SubFactory(OrganizationFactory)
     branch = factory.SubFactory(BranchFactory)

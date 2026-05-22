@@ -2,6 +2,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 def send_priority_notifications(announcement_id):
     """
     Placeholder for async processing of urgent notifications.
@@ -9,4 +10,6 @@ def send_priority_notifications(announcement_id):
     to send push notifications or emails immediately.
     """
     # TODO: Implement Celery task for sending async notifications
-    logger.info(f"Triggered priority notifications for announcement ID: {announcement_id}")
+    logger.info(
+        f"Triggered priority notifications for announcement ID: {announcement_id}",
+    )

@@ -1,14 +1,22 @@
-from rest_framework import serializers
+from academics.models import Grade
+from academics.models import Section
+from announcements.models import Announcement
+from announcements.models import AnnouncementGrade
+from announcements.models import AnnouncementSection
 from django.db import transaction
-from academics.models import Grade, Section
-from announcements.models import Announcement, AnnouncementGrade, AnnouncementSection
+from rest_framework import serializers
+
 
 class AnnouncementSerializer(serializers.ModelSerializer):
     targeted_grades = serializers.PrimaryKeyRelatedField(
-        queryset=Grade.objects.all(), many=True, required=False
+        queryset=Grade.objects.all(),
+        many=True,
+        required=False,
     )
     targeted_sections = serializers.PrimaryKeyRelatedField(
-        queryset=Section.objects.all(), many=True, required=False
+        queryset=Section.objects.all(),
+        many=True,
+        required=False,
     )
 
     class Meta:
@@ -44,14 +52,18 @@ class AnnouncementSerializer(serializers.ModelSerializer):
         for grade in grades:
             if grade.branch != branch:
                 raise serializers.ValidationError(
-                    {"targeted_grades": f"Grade {grade.name} does not belong to the selected branch."}
+                    {
+                        "targeted_grades": f"Grade {grade.name} does not belong to the selected branch.",
+                    },
                 )
 
         sections = data.get("targeted_sections", [])
         for section in sections:
             if section.branch != branch:
                 raise serializers.ValidationError(
-                    {"targeted_sections": f"Section {section.name} does not belong to the selected branch."}
+                    {
+                        "targeted_sections": f"Section {section.name} does not belong to the selected branch.",
+                    },
                 )
 
         return data
@@ -67,7 +79,10 @@ class AnnouncementSerializer(serializers.ModelSerializer):
         for grade in grades:
             AnnouncementGrade.objects.create(announcement=announcement, grade=grade)
         for section in sections:
-            AnnouncementSection.objects.create(announcement=announcement, section=section)
+            AnnouncementSection.objects.create(
+                announcement=announcement,
+                section=section,
+            )
 
         return announcement
 
@@ -85,10 +100,13 @@ class AnnouncementSerializer(serializers.ModelSerializer):
             instance.targeted_grades.all().delete()
             for grade in grades:
                 AnnouncementGrade.objects.create(announcement=instance, grade=grade)
-        
+
         if sections is not None:
             instance.targeted_sections.all().delete()
             for section in sections:
-                AnnouncementSection.objects.create(announcement=instance, section=section)
+                AnnouncementSection.objects.create(
+                    announcement=instance,
+                    section=section,
+                )
 
         return instance

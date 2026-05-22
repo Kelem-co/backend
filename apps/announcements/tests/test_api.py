@@ -1,11 +1,12 @@
 import pytest
+from academics.tests.factories import GradeFactory
+from academics.tests.factories import SectionFactory
 from accounts.tests.factories import UserFactory
 from branches.tests.factories import BranchFactory
 from organizations.tests.factories import OrganizationFactory
-from academics.tests.factories import GradeFactory, SectionFactory
-from announcements.tests.factories import AnnouncementFactory
 from rest_framework import status
 from rest_framework.test import APIClient
+
 
 @pytest.mark.django_db
 class TestAnnouncementsAPI:
@@ -27,7 +28,7 @@ class TestAnnouncementsAPI:
 
     def test_announcement_crud(self, api_client, user, organization, branch):
         api_client.force_authenticate(user=user)
-        
+
         grade = GradeFactory(organization=organization, branch=branch)
         section = SectionFactory(organization=organization, branch=branch, grade=grade)
 
@@ -41,7 +42,7 @@ class TestAnnouncementsAPI:
             "status": "DRAFT",
             "target_roles": "PARENTS",
             "targeted_grades": [str(grade.id)],
-            "targeted_sections": [str(section.id)]
+            "targeted_sections": [str(section.id)],
         }
         response = api_client.post("/api/announcements/", data)
         assert response.status_code == status.HTTP_201_CREATED, response.data
@@ -62,7 +63,7 @@ class TestAnnouncementsAPI:
         # Update
         response = api_client.patch(
             f"/api/announcements/{announcement_id}/",
-            {"subject": "Test Subject Updated"}
+            {"subject": "Test Subject Updated"},
         )
         assert response.status_code == status.HTTP_200_OK
         assert response.data["subject"] == "Test Subject Updated"
@@ -73,18 +74,18 @@ class TestAnnouncementsAPI:
 
     def test_get_targeting_criteria(self, api_client, user, organization, branch):
         api_client.force_authenticate(user=user)
-        
+
         grade = GradeFactory(organization=organization, branch=branch)
-        section = SectionFactory(organization=organization, branch=branch, grade=grade)
-        
+        SectionFactory(organization=organization, branch=branch, grade=grade)
+
         # Test custom action
         response = api_client.get("/api/announcements/get_targeting_criteria/")
         assert response.status_code == status.HTTP_200_OK
-        
+
         assert "grades" in response.data
         assert "sections" in response.data
-        
-        # Depending on scope filtering rules, it might or might not return them 
+
+        # Depending on scope filtering rules, it might or might not return them
         # (if UserFactory doesn't automatically give permissions to the branch).
         # Assuming the user has access to the branch's data, we assert lengths.
         # This assert depends on whether the user has roles, but at least the endpoint works.
