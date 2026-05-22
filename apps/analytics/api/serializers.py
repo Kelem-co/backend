@@ -37,5 +37,5 @@ class InterventionLogSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
 
-    def get_student_name(self, obj):
+    def get_student_name(self, obj) -> str:
         return f"{obj.student.first_name} {obj.student.last_name}"

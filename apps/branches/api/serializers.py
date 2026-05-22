@@ -1,3 +1,4 @@
+from accounts.models import User
 from branches.models import Branch
 from branches.models import BranchAdmin
 from rest_framework import serializers
@@ -59,6 +60,9 @@ class BranchSerializer(serializers.ModelSerializer):
 
 
 class BranchAdminSerializer(serializers.ModelSerializer):
+    email = serializers.EmailField(source="user.email", read_only=True)
+    name = serializers.CharField(source="user.name", read_only=True)
+
     class Meta:
         model = BranchAdmin
         fields = [
@@ -66,6 +70,8 @@ class BranchAdminSerializer(serializers.ModelSerializer):
             "organization",
             "branch",
             "user",
+            "email",
+            "name",
             "emergency_contact_name",
             "emergency_contact_phone",
             "role_title",
@@ -110,3 +116,35 @@ class BranchAdminSerializer(serializers.ModelSerializer):
             )
 
         return attrs
+
+
+class BranchAdminInviteSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    name = serializers.CharField(max_length=255)
+    father_name = serializers.CharField(max_length=255)
+    grandfather_name = serializers.CharField(max_length=255)
+    role_title = serializers.CharField(max_length=100)
+    branch = serializers.PrimaryKeyRelatedField(queryset=Branch.objects.all())
+
+    EMAIL_VALIDATION_ERROR_MESSAGE = "A user with this email already exists."
+
+    def validate_email(self, value):
+        if User.objects.filter(email=value).exists():
+            raise serializers.ValidationError(self.EMAIL_VALIDATION_ERROR_MESSAGE)
+        return value
+
+    def validate(self, attrs):
+        request = self.context.get("request")
+        branch = attrs.get("branch")
+        if request and branch:
+            if branch.organization.owner_id != request.user.id:
+                raise serializers.ValidationError(
+                    {"branch": "You can only manage branches in your organizations."},
+                )
+        return attrs
+
+
+class BranchAdminCompleteInvitationSerializer(serializers.Serializer):
+    uid = serializers.CharField()
+    token = serializers.CharField()
+    new_password = serializers.CharField(style={"input_type": "password"})

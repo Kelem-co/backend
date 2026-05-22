@@ -6,7 +6,7 @@ from http import HTTPStatus
 
 class ApiEnvelopeMixin:
     def finalize_response(self, request, response, *args, **kwargs):
-        response = super().finalize_response(request, response, *args, **kwargs)
+        response = super().finalize_response(request, response, *args, **kwargs)  # type: ignore[misc]
 
         if (
             not hasattr(response, "data")

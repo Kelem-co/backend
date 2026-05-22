@@ -104,11 +104,11 @@ class StudentReadSerializer(StudentSerializer):
             "organization_name",
         ]
 
-    def get_academic_year_id(self, obj):
+    def get_academic_year_id(self, obj) -> str | None:
         yr = obj.current_section.academic_year
         return str(yr.id) if yr else None
 
-    def get_academic_year_name(self, obj):
+    def get_academic_year_name(self, obj) -> str | None:
         yr = obj.current_section.academic_year
         return yr.name if yr else None
 
@@ -203,7 +203,7 @@ class ParentReadSerializer(ParentSerializer):
             "student_details",
         ]
 
-    def get_organization_details(self, obj):
+    def get_organization_details(self, obj) -> list[dict]:
         return [
             {
                 "id": str(organization.id),
@@ -213,7 +213,7 @@ class ParentReadSerializer(ParentSerializer):
             for organization in obj.organizations.all()
         ]
 
-    def get_branch_details(self, obj):
+    def get_branch_details(self, obj) -> list[dict]:
         return [
             {
                 "id": str(branch.id),
@@ -224,7 +224,7 @@ class ParentReadSerializer(ParentSerializer):
             for branch in obj.branches.all()
         ]
 
-    def get_student_details(self, obj):
+    def get_student_details(self, obj) -> list[dict]:
         return [
             {
                 "id": str(link.student.id),

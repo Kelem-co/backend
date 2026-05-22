@@ -3,6 +3,9 @@ from assessments.models import AssessmentResult
 from django.db import IntegrityError
 from django.db import transaction
 from django.db.models import Q
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter
+from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -95,6 +98,17 @@ class AssessmentViewSet(viewsets.ModelViewSet):
     # GET /assessments/by-section/?section=<id>[&task_type=][&status=]
     # ------------------------------------------------------------------
     @action(detail=False, methods=["get"], url_path="by-section")
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="section",
+                type=OpenApiTypes.UUID,
+                location=OpenApiParameter.QUERY,
+                description="Filter by section ID.",
+                required=True,
+            ),
+        ],
+    )
     def by_section(self, request):
         """All assessments for a given section across all subjects."""
         section_id = request.query_params.get("section")
@@ -112,6 +126,17 @@ class AssessmentViewSet(viewsets.ModelViewSet):
     # GET /assessments/by-teacher/?teacher=<id>[&task_type=][&status=]
     # ------------------------------------------------------------------
     @action(detail=False, methods=["get"], url_path="by-teacher")
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="teacher",
+                type=OpenApiTypes.UUID,
+                location=OpenApiParameter.QUERY,
+                description="Filter by teacher ID.",
+                required=True,
+            ),
+        ],
+    )
     def by_teacher(self, request):
         """All assessments created by/for a specific teacher."""
         teacher_id = request.query_params.get("teacher")

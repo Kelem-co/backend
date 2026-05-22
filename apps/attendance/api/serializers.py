@@ -141,7 +141,7 @@ class AttendanceReadSerializer(AttendanceSerializer):
             "needs_reason",
         ]
 
-    def get_student_name(self, obj):
+    def get_student_name(self, obj) -> str:
         return f"{obj.student.first_name} {obj.student.last_name}"
 
 
@@ -278,5 +278,5 @@ class AttendanceSummarySerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields  # summary is computed, never written via API
 
-    def get_student_name(self, obj):
+    def get_student_name(self, obj) -> str:
         return f"{obj.student.first_name} {obj.student.last_name}"
