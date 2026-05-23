@@ -1,9 +1,11 @@
 import secrets
 
+from accounts.email import TeacherInvitationEmail
+from accounts.models import User
 from branches.models import Branch
 from django.contrib.auth.tokens import default_token_generator
-from django.db.models import Q
 from django.db.models import Prefetch
+from django.db.models import Q
 from django.utils import timezone
 from django.utils.encoding import force_bytes
 from django.utils.encoding import force_str
@@ -14,8 +16,8 @@ from drf_spectacular.utils import OpenApiParameter
 from drf_spectacular.utils import extend_schema
 from drf_spectacular.utils import extend_schema_view
 from drf_spectacular.utils import inline_serializer
-from rest_framework import status
 from rest_framework import serializers
+from rest_framework import status
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
@@ -28,10 +30,8 @@ from teachers.models import Teacher
 from teachers.models import TeacherQualification
 from teachers.models import TeacherSubjectAssignment
 
-from accounts.email import TeacherInvitationEmail
-from accounts.models import User
-from core.api.access import user_resource_access_filter
 from core.api.access import user_can_access_branch
+from core.api.access import user_resource_access_filter
 from core.models import ImportJob
 from core.tasks import process_bulk_import
 
@@ -46,7 +46,6 @@ from .serializers import TeacherSectionSerializer
 from .serializers import TeacherSerializer
 from .serializers import TeacherSubjectAssignmentReadSerializer
 from .serializers import TeacherSubjectAssignmentSerializer
-
 
 TEACHER_LIST_PARAMETERS = [
     OpenApiParameter(
