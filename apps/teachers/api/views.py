@@ -8,8 +8,12 @@ from django.utils.encoding import force_bytes
 from django.utils.encoding import force_str
 from django.utils.http import urlsafe_base64_decode
 from django.utils.http import urlsafe_base64_encode
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter
 from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import inline_serializer
 from rest_framework import status
+from rest_framework import serializers
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
@@ -144,7 +148,7 @@ class TeacherViewSet(viewsets.ModelViewSet):
     # /teachers/<id>/qualifications/
     # ------------------------------------------------------------------
     @action(detail=True, methods=["get"], url_path="qualifications")
-    def qualifications(self, request, pk=None):
+    def qualifications(self, request, *args, **kwargs):
         """Return all qualifications for this teacher."""
         teacher = self.get_object()
         qs = teacher.qualifications.select_related("certificate_copy", "organization")
@@ -155,7 +159,7 @@ class TeacherViewSet(viewsets.ModelViewSet):
     # /teachers/<id>/assignments/
     # ------------------------------------------------------------------
     @action(detail=True, methods=["get"], url_path="assignments")
-    def assignments(self, request, pk=None):
+    def assignments(self, request, *args, **kwargs):
         """Return all subject assignments for this teacher."""
         teacher = self.get_object()
         qs = teacher.subject_assignments.select_related(
@@ -170,7 +174,27 @@ class TeacherViewSet(viewsets.ModelViewSet):
     # /teachers/<id>/sections/
     # ------------------------------------------------------------------
     @action(detail=True, methods=["get"], url_path="sections")
-    def sections(self, request, pk=None):
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="academic_year",
+                type=OpenApiTypes.UUID,
+                location=OpenApiParameter.QUERY,
+                description="Optionally filter sections by academic year ID.",
+                required=False,
+            ),
+        ],
+        responses={
+            status.HTTP_200_OK: inline_serializer(
+                name="TeacherSectionsResponse",
+                fields={
+                    "count": serializers.IntegerField(),
+                    "sections": TeacherSectionSerializer(many=True),
+                },
+            ),
+        },
+    )
+    def sections(self, request, *args, **kwargs):
         """
         Return the unique sections (with grade and academic year context)
         that this teacher is assigned to teach.
