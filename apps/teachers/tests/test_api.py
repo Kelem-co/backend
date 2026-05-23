@@ -162,6 +162,26 @@ class TestTeacherDetailActions:
         assert response.data["results"][0]["user"] == str(teacher.user_id)
         assert response.data["results"][0]["id"] != str(other_teacher.id)
 
+    def test_teacher_can_list_own_profile_by_user_id(
+        self,
+        api_client,
+        teacher,
+    ):
+        other_user = UserFactory(role="TEACHER")
+        api_client.force_authenticate(user=teacher.user)
+
+        response = api_client.get(f"/api/teachers/?user={teacher.user_id}")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["count"] == 1
+        assert response.data["results"][0]["id"] == str(teacher.id)
+        assert response.data["results"][0]["user"] == str(teacher.user_id)
+
+        other_response = api_client.get(f"/api/teachers/?user={other_user.id}")
+
+        assert other_response.status_code == status.HTTP_200_OK
+        assert other_response.data["count"] == 0
+
 
 @pytest.mark.django_db
 def test_teacher_sections_endpoint_is_present_in_openapi_schema(admin_client):

@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from rest_framework.exceptions import ValidationError
 from teachers.models import HomeroomAssignment
 from teachers.models import Teacher
 from teachers.models import TeacherQualification
@@ -303,7 +304,6 @@ class TeacherInviteSerializer(serializers.Serializer):
     father_name = serializers.CharField(max_length=255)
     grandfather_name = serializers.CharField(max_length=255)
     specialization = serializers.CharField(max_length=255, required=False, default="")
-    # branch queryset is resolved lazily to avoid circular imports at module load
     branch = serializers.PrimaryKeyRelatedField(read_only=True)
 
     EMAIL_VALIDATION_ERROR_MESSAGE = "A user with this email already exists."
@@ -327,11 +327,10 @@ class TeacherInviteSerializer(serializers.Serializer):
     def validate(self, attrs: dict) -> dict:
         request = self.context.get("request")
         branch = attrs.get("branch")
-        if request and branch:
-            if branch.organization.owner_id != request.user.id:
-                raise serializers.ValidationError(
-                    {"branch": "You can only manage branches in your organizations."},
-                )
+        if request and branch and branch.organization.owner_id != request.user.id:
+            raise ValidationError(
+                {"branch": "You can only manage branches in your organizations."},
+            )
         return attrs
 
 

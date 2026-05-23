@@ -2,6 +2,7 @@ import secrets
 
 from branches.models import Branch
 from django.contrib.auth.tokens import default_token_generator
+from django.db.models import Q
 from django.db.models import Prefetch
 from django.utils import timezone
 from django.utils.encoding import force_bytes
@@ -29,7 +30,7 @@ from teachers.models import TeacherSubjectAssignment
 
 from accounts.email import TeacherInvitationEmail
 from accounts.models import User
-from core.api.access import scope_queryset_for_user
+from core.api.access import user_resource_access_filter
 from core.api.access import user_can_access_branch
 from core.models import ImportJob
 from core.tasks import process_bulk_import
@@ -70,6 +71,27 @@ TEACHER_LIST_PARAMETERS = [
         required=False,
     ),
 ]
+
+
+def scope_teacher_queryset_for_user(
+    queryset,
+    user,
+    *,
+    own_lookup: str,
+    organization_lookup: str = "organization",
+    branch_lookup: str | None = "branch",
+):
+    """
+    Extend the shared access rules so teachers can access their own records.
+    """
+    access_filter = user_resource_access_filter(
+        user,
+        organization_lookup=organization_lookup,
+        branch_lookup=branch_lookup,
+    )
+    if getattr(user, "is_authenticated", False):
+        access_filter |= Q(**{own_lookup: user})
+    return queryset.filter(access_filter).distinct()
 
 
 @extend_schema_view(
@@ -113,7 +135,11 @@ class TeacherViewSet(viewsets.ModelViewSet):
         if getattr(self, "swagger_fake_view", False):
             return qs.none()
 
-        qs = scope_queryset_for_user(qs, self.request.user)
+        qs = scope_teacher_queryset_for_user(
+            qs,
+            self.request.user,
+            own_lookup="user",
+        )
         org = self.request.query_params.get("organization")
         branch = self.request.query_params.get("branch")
         user_id = self.request.query_params.get("user")
@@ -303,9 +329,10 @@ class TeacherQualificationViewSet(viewsets.ModelViewSet):
         if getattr(self, "swagger_fake_view", False):
             return qs.none()
 
-        qs = scope_queryset_for_user(
+        qs = scope_teacher_queryset_for_user(
             qs,
             self.request.user,
+            own_lookup="teacher__user",
             branch_lookup="teacher__branch",
         )
         teacher_id = self.request.query_params.get("teacher")
@@ -356,9 +383,10 @@ class TeacherSubjectAssignmentViewSet(viewsets.ModelViewSet):
         if getattr(self, "swagger_fake_view", False):
             return qs.none()
 
-        qs = scope_queryset_for_user(
+        qs = scope_teacher_queryset_for_user(
             qs,
             self.request.user,
+            own_lookup="teacher__user",
             branch_lookup="section__branch",
         )
         filters = {}
@@ -483,7 +511,11 @@ class HomeroomAssignmentViewSet(viewsets.ModelViewSet):
         if getattr(self, "swagger_fake_view", False):
             return qs.none()
 
-        qs = scope_queryset_for_user(qs, self.request.user)
+        qs = scope_teacher_queryset_for_user(
+            qs,
+            self.request.user,
+            own_lookup="teacher__user",
+        )
         filters = {}
         for param in ("organization", "branch", "academic_year", "section", "teacher"):
             val = self.request.query_params.get(param)
