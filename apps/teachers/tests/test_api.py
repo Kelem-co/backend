@@ -1,7 +1,7 @@
 from datetime import date
 
 import pytest
-from academics.tests.factories import AcademicYearFactory
+from academics.models import AcademicYear
 from academics.tests.factories import GradeFactory
 from academics.tests.factories import SectionFactory
 from academics.tests.factories import SubjectFactory
@@ -46,7 +46,7 @@ class TestTeacherDetailActions:
 
     @pytest.fixture
     def academic_year(self, organization, branch):
-        return AcademicYearFactory(
+        return AcademicYear.objects.get(
             organization=organization,
             branch=branch,
             name="2025/2026",
@@ -78,7 +78,7 @@ class TestTeacherDetailActions:
             code="MATH-7",
         )
 
-    def test_teacher_sections_detail_action_uses_id_lookup_kwarg(
+    def test_teacher_sections_detail_action_uses_id_lookup_kwarg(  # noqa: PLR0913
         self,
         api_client,
         owner,
@@ -159,7 +159,7 @@ class TestTeacherDetailActions:
         assert response.status_code == status.HTTP_200_OK
         assert response.data["count"] == 1
         assert response.data["results"][0]["id"] == str(teacher.id)
-        assert response.data["results"][0]["user"] == str(teacher.user_id)
+        assert str(response.data["results"][0]["user"]) == str(teacher.user_id)
         assert response.data["results"][0]["id"] != str(other_teacher.id)
 
     def test_teacher_can_list_own_profile_by_user_id(
@@ -175,7 +175,7 @@ class TestTeacherDetailActions:
         assert response.status_code == status.HTTP_200_OK
         assert response.data["count"] == 1
         assert response.data["results"][0]["id"] == str(teacher.id)
-        assert response.data["results"][0]["user"] == str(teacher.user_id)
+        assert str(response.data["results"][0]["user"]) == str(teacher.user_id)
 
         other_response = api_client.get(f"/api/teachers/?user={other_user.id}")
 

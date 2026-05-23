@@ -83,6 +83,69 @@ class TestTeacherInviteView:
         assert "errors" in response.data
         assert response.data["errors"][0]["field"] == "branch"
 
+    @patch("accounts.email.send_email_task.delay")
+    def test_invite_allows_superuser_for_other_owners_branch(
+        self,
+        mock_send_email,
+        api_rf: APIRequestFactory,
+    ):
+        superuser = UserFactory(is_superuser=True, is_staff=True)
+        owner = UserFactory()
+        branch = BranchFactory(school__organization__owner=owner)
+
+        view = TeacherInviteView.as_view()
+        request = api_rf.post(
+            "/fake-url/",
+            {
+                "email": "superteacher@example.com",
+                "name": "Super",
+                "father_name": "Teacher",
+                "grandfather_name": "Test",
+                "specialization": "Science",
+                "branch": branch.id,
+            },
+        )
+        request.user = superuser
+
+        response = view(request)
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert User.objects.filter(email="superteacher@example.com").exists()
+        assert Teacher.objects.filter(user__email="superteacher@example.com").exists()
+        assert mock_send_email.called
+
+    @patch("accounts.email.send_email_task.delay", side_effect=RuntimeError("boom"))
+    def test_invite_rolls_back_user_when_email_send_fails(
+        self,
+        mock_send_email,
+        api_rf: APIRequestFactory,
+    ):
+        user = UserFactory()
+        branch = BranchFactory(school__organization__owner=user)
+
+        view = TeacherInviteView.as_view()
+        request = api_rf.post(
+            "/fake-url/",
+            {
+                "email": "rollbackteacher@example.com",
+                "name": "Rollback",
+                "father_name": "Teacher",
+                "grandfather_name": "Test",
+                "specialization": "Mathematics",
+                "branch": branch.id,
+            },
+        )
+        request.user = user
+
+        with pytest.raises(RuntimeError, match="boom"):
+            view(request)
+
+        assert mock_send_email.called
+        assert not User.objects.filter(email="rollbackteacher@example.com").exists()
+        assert not Teacher.objects.filter(
+            user__email="rollbackteacher@example.com",
+        ).exists()
+
 
 @pytest.mark.django_db
 class TestTeacherCompleteInvitationView:
@@ -195,23 +258,26 @@ def test_teacher_invitation_endpoints_are_present_in_openapi_schema(admin_client
     assert invite_request_ref.endswith("/TeacherInvite")
     assert complete_request_ref.endswith("/TeacherCompleteInvitation")
 
-    def test_complete_rejects_missing_teacher_profile(self, api_rf: APIRequestFactory):
-        user = UserFactory(role=User.Role.TEACHER, is_active=False)
-        uid = urlsafe_base64_encode(force_bytes(user.pk))
-        token = default_token_generator.make_token(user)
 
-        view = TeacherCompleteInvitationView.as_view()
-        request = api_rf.post(
-            "/fake-url/",
-            {
-                "uid": uid,
-                "token": token,
-                "new_password": "new_secure_password",
-            },
-        )
+@pytest.mark.django_db
+def test_complete_rejects_missing_teacher_profile():
+    api_rf = APIRequestFactory()
+    user = UserFactory(role=User.Role.TEACHER, is_active=False)
+    uid = urlsafe_base64_encode(force_bytes(user.pk))
+    token = default_token_generator.make_token(user)
 
-        response = view(request)
+    view = TeacherCompleteInvitationView.as_view()
+    request = api_rf.post(
+        "/fake-url/",
+        {
+            "uid": uid,
+            "token": token,
+            "new_password": "new_secure_password",
+        },
+    )
 
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "errors" in response.data
-        assert response.data["errors"][0]["field"] == "uid"
+    response = view(request)
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "errors" in response.data
+    assert response.data["errors"][0]["field"] == "uid"

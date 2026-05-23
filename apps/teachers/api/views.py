@@ -4,6 +4,7 @@ from accounts.email import TeacherInvitationEmail
 from accounts.models import User
 from branches.models import Branch
 from django.contrib.auth.tokens import default_token_generator
+from django.db import transaction
 from django.db.models import Prefetch
 from django.db.models import Q
 from django.utils import timezone
@@ -230,7 +231,6 @@ class TeacherViewSet(viewsets.ModelViewSet):
     # ------------------------------------------------------------------
     # /teachers/<id>/sections/
     # ------------------------------------------------------------------
-    @action(detail=True, methods=["get"], url_path="sections")
     @extend_schema(
         parameters=[
             OpenApiParameter(
@@ -251,6 +251,7 @@ class TeacherViewSet(viewsets.ModelViewSet):
             ),
         },
     )
+    @action(detail=True, methods=["get"], url_path="sections")
     def sections(self, request, *args, **kwargs):
         """
         Return the unique sections (with grade and academic year context)
@@ -608,41 +609,41 @@ class TeacherInviteView(APIView):
         data = serializer.validated_data
         branch: Branch = data["branch"]
 
-        # Create the user account (inactive until invitation is completed)
-        random_password = secrets.token_urlsafe(16)
-        user = User.objects.create_user(
-            email=data["email"],
-            password=random_password,
-            name=data["name"],
-            father_name=data["father_name"],
-            grandfather_name=data["grandfather_name"],
-            role=User.Role.TEACHER,
-            is_active=False,
-        )
+        with transaction.atomic():
+            # Keep the invite flow atomic so failed profile/email steps do not
+            # leave behind an unusable inactive user record.
+            random_password = secrets.token_urlsafe(16)
+            user = User.objects.create_user(
+                email=data["email"],
+                password=random_password,
+                name=data["name"],
+                father_name=data["father_name"],
+                grandfather_name=data["grandfather_name"],
+                role=User.Role.TEACHER,
+                is_active=False,
+            )
 
-        # Create the teacher profile linked to the branch
-        Teacher.objects.create(
-            user=user,
-            organization=branch.organization,
-            branch=branch,
-            specialization=data.get("specialization", ""),
-        )
+            Teacher.objects.create(
+                user=user,
+                organization=branch.organization,
+                branch=branch,
+                specialization=data.get("specialization", ""),
+            )
 
-        # Build the invitation link
-        uid = urlsafe_base64_encode(force_bytes(user.pk))
-        token = default_token_generator.make_token(user)
-        path = f"complete-teacher-invitation/{uid}/{token}"
+            uid = urlsafe_base64_encode(force_bytes(user.pk))
+            token = default_token_generator.make_token(user)
+            path = f"complete-teacher-invitation/{uid}/{token}"
 
-        email_obj = TeacherInvitationEmail(
-            request,
-            context={
-                "user": user,
-                "branch_name": branch.name,
-                "invited_by": request.user.name,
-                "url": path,
-            },
-        )
-        email_obj.send([user.email])
+            email_obj = TeacherInvitationEmail(
+                request,
+                context={
+                    "user": user,
+                    "branch_name": branch.name,
+                    "invited_by": request.user.name,
+                    "url": path,
+                },
+            )
+            email_obj.send([user.email])
 
         return Response(
             {"message": "Teacher invitation sent successfully."},

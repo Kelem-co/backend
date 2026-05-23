@@ -327,10 +327,13 @@ class TeacherInviteSerializer(serializers.Serializer):
     def validate(self, attrs: dict) -> dict:
         request = self.context.get("request")
         branch = attrs.get("branch")
-        if request and branch and branch.organization.owner_id != request.user.id:
-            raise ValidationError(
-                {"branch": "You can only manage branches in your organizations."},
-            )
+        if request and branch:
+            if request.user.is_superuser:
+                return attrs
+            if branch.organization.owner_id != request.user.id:
+                raise ValidationError(
+                    {"branch": "You can only manage branches in your organizations."},
+                )
         return attrs
 
 
