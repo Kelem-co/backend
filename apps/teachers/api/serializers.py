@@ -264,3 +264,27 @@ class BulkImportSerializer(serializers.Serializer):
     file = MediaFileReferenceField()
     organization = serializers.UUIDField()
     branch = serializers.UUIDField()
+
+
+# ---------------------------------------------------------------------------
+# Teacher sections summary
+# ---------------------------------------------------------------------------
+
+
+class TeacherSectionSerializer(serializers.Serializer):
+    """
+    Read-only serializer for the /teachers/<id>/sections/ endpoint.
+
+    Returns one entry per unique section the teacher is assigned to,
+    with the grade and academic year context included.
+    Subjects taught in that section are listed under ``subjects``.
+    """
+
+    section_id = serializers.UUIDField()
+    section_name = serializers.CharField()
+    grade_id = serializers.UUIDField()
+    grade_name = serializers.CharField()
+    grade_level = serializers.IntegerField()
+    academic_year_id = serializers.UUIDField()
+    academic_year_name = serializers.CharField()
+    subjects = serializers.ListField(child=serializers.DictField())

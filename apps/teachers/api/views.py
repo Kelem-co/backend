@@ -20,6 +20,7 @@ from .serializers import HomeroomAssignmentReadSerializer
 from .serializers import HomeroomAssignmentSerializer
 from .serializers import SectionTeacherScheduleSerializer
 from .serializers import TeacherQualificationSerializer
+from .serializers import TeacherSectionSerializer
 from .serializers import TeacherSerializer
 from .serializers import TeacherSubjectAssignmentReadSerializer
 from .serializers import TeacherSubjectAssignmentSerializer
@@ -148,6 +149,65 @@ class TeacherViewSet(viewsets.ModelViewSet):
         ).all()
         serializer = TeacherSubjectAssignmentReadSerializer(qs, many=True)
         return Response(serializer.data)
+
+    # ------------------------------------------------------------------
+    # /teachers/<id>/sections/
+    # ------------------------------------------------------------------
+    @action(detail=True, methods=["get"], url_path="sections")
+    def sections(self, request, pk=None):
+        """
+        Return the unique sections (with grade and academic year context)
+        that this teacher is assigned to teach.
+
+        Each entry lists the subjects the teacher covers in that section
+        so the caller never needs a follow-up request.
+
+        Optional query param:
+          ?academic_year=<uuid>  — narrow to a specific academic year.
+        """
+        teacher = self.get_object()
+        qs = teacher.subject_assignments.select_related(
+            "subject__grade",
+            "section",
+            "academic_year",
+        )
+
+        academic_year_id = request.query_params.get("academic_year")
+        if academic_year_id:
+            qs = qs.filter(academic_year_id=academic_year_id)
+
+        # Build a deduplicated map keyed by (section_id, academic_year_id)
+        # so each section appears once even when the teacher covers multiple
+        # subjects there.
+        section_map: dict[tuple, dict] = {}
+        for assignment in qs:
+            key = (str(assignment.section_id), str(assignment.academic_year_id))
+            if key not in section_map:
+                section_map[key] = {
+                    "section_id": assignment.section_id,
+                    "section_name": assignment.section.name,
+                    "grade_id": assignment.section.grade_id,
+                    "grade_name": assignment.section.grade.name,
+                    "grade_level": assignment.section.grade.level,
+                    "academic_year_id": assignment.academic_year_id,
+                    "academic_year_name": assignment.academic_year.name,
+                    "subjects": [],
+                }
+            section_map[key]["subjects"].append(
+                {
+                    "subject_id": str(assignment.subject_id),
+                    "subject_name": assignment.subject.name,
+                    "subject_code": assignment.subject.code,
+                },
+            )
+
+        # Sort by grade level then section name for a predictable order
+        result = sorted(
+            section_map.values(),
+            key=lambda x: (x["grade_level"], x["section_name"]),
+        )
+        serializer = TeacherSectionSerializer(result, many=True)
+        return Response({"count": len(result), "sections": serializer.data})
 
 
 class TeacherQualificationViewSet(viewsets.ModelViewSet):
