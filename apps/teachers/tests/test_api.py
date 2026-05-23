@@ -137,6 +137,31 @@ class TestTeacherDetailActions:
         assert response.data[0]["id"] == str(qualification.id)
         assert response.data[0]["degree_name"] == "BSc"
 
+    def test_teacher_list_can_filter_by_user_id(
+        self,
+        api_client,
+        owner,
+        organization,
+        branch,
+        teacher,
+    ):
+        other_teacher = Teacher.objects.create(
+            user=UserFactory(role="TEACHER"),
+            organization=organization,
+            branch=branch,
+            employee_id="EMP-1002",
+            specialization="Physics",
+        )
+        api_client.force_authenticate(user=owner)
+
+        response = api_client.get(f"/api/teachers/?user={teacher.user_id}")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["count"] == 1
+        assert response.data["results"][0]["id"] == str(teacher.id)
+        assert response.data["results"][0]["user"] == str(teacher.user_id)
+        assert response.data["results"][0]["id"] != str(other_teacher.id)
+
 
 @pytest.mark.django_db
 def test_teacher_sections_endpoint_is_present_in_openapi_schema(admin_client):
@@ -153,3 +178,16 @@ def test_teacher_sections_endpoint_is_present_in_openapi_schema(admin_client):
 
     assert "academic_year" in parameter_names
     assert response_schema.endswith("/TeacherSectionsResponse")
+
+
+@pytest.mark.django_db
+def test_teacher_list_schema_documents_user_filter(admin_client):
+    response = admin_client.get(f"{reverse('api-schema')}?format=json")
+
+    assert response.status_code == status.HTTP_200_OK
+
+    schema = response.json()
+    operation = schema["paths"]["/api/teachers/"]["get"]
+    parameter_names = {parameter["name"] for parameter in operation["parameters"]}
+
+    assert "user" in parameter_names

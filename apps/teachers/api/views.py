@@ -11,6 +11,7 @@ from django.utils.http import urlsafe_base64_encode
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter
 from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import extend_schema_view
 from drf_spectacular.utils import inline_serializer
 from rest_framework import status
 from rest_framework import serializers
@@ -46,12 +47,40 @@ from .serializers import TeacherSubjectAssignmentReadSerializer
 from .serializers import TeacherSubjectAssignmentSerializer
 
 
+TEACHER_LIST_PARAMETERS = [
+    OpenApiParameter(
+        name="organization",
+        type=OpenApiTypes.UUID,
+        location=OpenApiParameter.QUERY,
+        description="Filter teachers by organization ID.",
+        required=False,
+    ),
+    OpenApiParameter(
+        name="branch",
+        type=OpenApiTypes.UUID,
+        location=OpenApiParameter.QUERY,
+        description="Filter teachers by branch ID.",
+        required=False,
+    ),
+    OpenApiParameter(
+        name="user",
+        type=OpenApiTypes.UUID,
+        location=OpenApiParameter.QUERY,
+        description="Filter teachers by related user ID.",
+        required=False,
+    ),
+]
+
+
+@extend_schema_view(
+    list=extend_schema(parameters=TEACHER_LIST_PARAMETERS),
+)
 class TeacherViewSet(viewsets.ModelViewSet):
     """
     CRUD for Teacher profiles.
 
     Search: ?search=<name|employee_id|specialization>
-    Filter: ?organization=<id>, ?branch=<id>
+    Filter: ?organization=<id>, ?branch=<id>, ?user=<id>
 
     Custom actions:
       GET /teachers/<id>/qualifications/  - list qualifications for a teacher
@@ -87,10 +116,13 @@ class TeacherViewSet(viewsets.ModelViewSet):
         qs = scope_queryset_for_user(qs, self.request.user)
         org = self.request.query_params.get("organization")
         branch = self.request.query_params.get("branch")
+        user_id = self.request.query_params.get("user")
         if org:
             qs = qs.filter(organization_id=org)
         if branch:
             qs = qs.filter(branch_id=branch)
+        if user_id:
+            qs = qs.filter(user_id=user_id)
         return qs
 
     def get_serializer_class(self):
