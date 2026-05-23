@@ -88,7 +88,7 @@ class TeacherViewSet(viewsets.ModelViewSet):
 
         organization_id = serializer.validated_data["organization"]
         branch_id = serializer.validated_data["branch"]
-        uploaded_file = serializer.validated_data["file"]
+        media_file = serializer.validated_data["file"]
 
         # Permission check: Check if user has access to this branch
         try:
@@ -109,7 +109,7 @@ class TeacherViewSet(viewsets.ModelViewSet):
             )
 
         import_job = ImportJob.objects.create(
-            file=uploaded_file,
+            file=media_file,
             module="teachers",
             organization_id=organization_id,
             branch_id=branch_id,

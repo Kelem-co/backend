@@ -253,7 +253,7 @@ class StudentViewSet(viewsets.ModelViewSet):
 
         organization_id = serializer.validated_data["organization"]
         branch_id = serializer.validated_data["branch"]
-        uploaded_file = serializer.validated_data["file"]
+        media_file = serializer.validated_data["file"]
 
         # Permission check
         try:
@@ -274,7 +274,7 @@ class StudentViewSet(viewsets.ModelViewSet):
             )
 
         import_job = ImportJob.objects.create(
-            file=uploaded_file,
+            file=media_file,
             module="students",
             organization_id=organization_id,
             branch_id=branch_id,
@@ -414,7 +414,7 @@ class ParentViewSet(viewsets.ModelViewSet):
 
         organization_id = serializer.validated_data["organization"]
         branch_id = serializer.validated_data["branch"]
-        uploaded_file = serializer.validated_data["file"]
+        media_file = serializer.validated_data["file"]
 
         # Permission check
         try:
@@ -435,7 +435,7 @@ class ParentViewSet(viewsets.ModelViewSet):
             )
 
         import_job = ImportJob.objects.create(
-            file=uploaded_file,
+            file=media_file,
             module="parents",
             organization_id=organization_id,
             branch_id=branch_id,

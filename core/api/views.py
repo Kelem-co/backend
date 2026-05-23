@@ -2,6 +2,7 @@ from drf_spectacular.utils import extend_schema
 from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
 
+from core.api.access import scope_queryset_for_user
 from core.api.serializers import ImportJobSerializer
 from core.models import ImportJob
 
@@ -11,8 +12,10 @@ from core.models import ImportJob
     description="Retrieve the status, progress, and errors of a bulk import job.",
 )
 class ImportStatusView(generics.RetrieveAPIView):
-    queryset = ImportJob.objects.all()
     serializer_class = ImportJobSerializer
     permission_classes = [IsAuthenticated]
     lookup_field = "id"
     lookup_url_kwarg = "task_id"
+
+    def get_queryset(self):
+        return scope_queryset_for_user(ImportJob.objects.all(), self.request.user)

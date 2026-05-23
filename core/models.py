@@ -46,7 +46,12 @@ class ImportJob(TimeStampedModel, UUIDModel):
         default="",
         blank=True,
     )
-    file = models.FileField(_("Uploaded File"), upload_to="imports/")
+    file = models.ForeignKey(
+        "media.MediaFile",
+        on_delete=models.PROTECT,
+        related_name="import_jobs",
+        verbose_name=_("Uploaded File"),
+    )
     module = models.CharField(
         _("Module"),
         max_length=50,

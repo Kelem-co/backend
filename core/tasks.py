@@ -1,9 +1,11 @@
 from celery import shared_task
+from django.db import DatabaseError
 from students.services.bulk_import import ParentBulkImportService
 from students.services.bulk_import import StudentBulkImportService
 from teachers.services.bulk_import import TeacherBulkImportService
 
 from core.models import ImportJob
+from media.storage import S3StorageClient
 
 SERVICE_BY_MODULE = {
     "students": StudentBulkImportService,
@@ -15,7 +17,7 @@ SERVICE_BY_MODULE = {
 @shared_task(bind=True)
 def process_bulk_import(self, import_job_id):
     try:
-        import_job = ImportJob.objects.get(id=import_job_id)
+        import_job = ImportJob.objects.select_related("file").get(id=import_job_id)
     except ImportJob.DoesNotExist:
         return "ImportJob not found"
 
@@ -32,8 +34,9 @@ def process_bulk_import(self, import_job_id):
         import_job.save(update_fields=["status", "errors"])
         return "Failed - Unknown Module"
 
-    file_content = import_job.file.read()
-    file_name = import_job.file.name
+    storage_client = S3StorageClient()
+    file_content = storage_client.get_object_bytes(import_job.file.key)
+    file_name = import_job.file.file_name
 
     service = service_class(
         file_content=file_content,
@@ -44,16 +47,18 @@ def process_bulk_import(self, import_job_id):
 
     try:
         success, errors = service.run()
-        if success:
-            import_job.status = ImportJob.Status.SUCCESS
-            import_job.progress = 100
-        else:
-            import_job.status = ImportJob.Status.FAILED
-            import_job.errors = errors
-        import_job.save(update_fields=["status", "progress", "errors"])
-    except Exception as e:  # noqa: BLE001
+    except (DatabaseError, OSError, TypeError, ValueError) as e:
         import_job.status = ImportJob.Status.FAILED
         import_job.errors = [{"row": 0, "errors": {"server": [f"Task error: {e!s}"]}}]
         import_job.save(update_fields=["status", "errors"])
+        return f"Completed: {import_job.status}"
+
+    if success:
+        import_job.status = ImportJob.Status.SUCCESS
+        import_job.progress = 100
+    else:
+        import_job.status = ImportJob.Status.FAILED
+        import_job.errors = errors
+    import_job.save(update_fields=["status", "progress", "errors"])
 
     return f"Completed: {import_job.status}"

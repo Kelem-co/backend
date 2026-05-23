@@ -1,4 +1,6 @@
 import io
+from datetime import date
+from unittest import mock
 
 import pandas as pd
 import pytest
@@ -7,13 +9,28 @@ from academics.tests.factories import SectionFactory
 from accounts.models import User
 from accounts.tests.factories import UserFactory
 from branches.tests.factories import BranchFactory
-from django.core.files.uploadedfile import SimpleUploadedFile
+from django.utils import timezone
 from organizations.tests.factories import OrganizationFactory
 from rest_framework import status
 from rest_framework.test import APIClient
 from students.models import Parent
 from students.models import ParentStudentLink
 from students.models import Student
+
+from core.models import ImportJob
+from media.tests.factories import MediaFileFactory
+
+
+def create_csv_media(*, user, file_name: str, content: bytes):
+    media_file = MediaFileFactory(
+        uploaded_by=user,
+        file_name=file_name,
+        content_type="text/csv",
+    )
+    return media_file, mock.patch(
+        "core.tasks.S3StorageClient.get_object_bytes",
+        return_value=content,
+    )
 
 
 @pytest.mark.django_db
@@ -59,30 +76,105 @@ class TestStudentAndParentBulkImport:
         df = pd.DataFrame(data)
         csv_buf = io.StringIO()
         df.to_csv(csv_buf, index=False)
-        uploaded_file = SimpleUploadedFile(
-            "parents.csv",
-            csv_buf.getvalue().encode("utf-8"),
-            content_type="text/csv",
+        media_file, storage_mock = create_csv_media(
+            user=user,
+            file_name="parents.csv",
+            content=csv_buf.getvalue().encode("utf-8"),
         )
 
         payload = {
             "organization": str(organization.id),
             "branch": str(branch.id),
-            "file": uploaded_file,
+            "file": str(media_file.id),
         }
 
-        response = api_client.post(
-            "/api/parents/bulk-import/",
-            payload,
-            format="multipart",
-        )
+        with storage_mock:
+            response = api_client.post(
+                "/api/parents/bulk-import/",
+                payload,
+                format="json",
+            )
         assert response.status_code == status.HTTP_202_ACCEPTED
 
-        assert User.objects.filter(
-            email="parent1@example.com",
-            role=User.Role.PARENT,
-        ).exists()
-        assert Parent.objects.filter(user__email="parent1@example.com").exists()
+        parent_user = User.objects.get(email="parent1@example.com")
+        assert parent_user.role == User.Role.PARENT
+        assert parent_user.name == "Parent One"
+        assert parent_user.father_name == "FParent One"
+        assert parent_user.grandfather_name == "GParent One"
+        assert parent_user.phone_number == "+251911111111"
+
+        parent_profile = Parent.objects.get(user=parent_user)
+        assert parent_profile.secondary_phone_number == ""
+        assert parent_profile.occupation == "Merchant"
+        assert list(parent_profile.organizations.values_list("id", flat=True)) == [
+            organization.id,
+        ]
+        assert list(parent_profile.branches.values_list("id", flat=True)) == [
+            branch.id,
+        ]
+
+    def test_parent_bulk_import_validation_error_rolls_back_everything(
+        self,
+        api_client,
+        user,
+        organization,
+        branch,
+    ):
+        api_client.force_authenticate(user=user)
+
+        UserFactory(phone_number="+251955555555")
+
+        data = {
+            "name": ["Parent One"],
+            "father_name": ["FParent One"],
+            "grandfather_name": ["GParent One"],
+            "email": ["conflict@example.com"],
+            "phone_number": ["+251955555555"],
+            "secondary_phone_number": [""],
+            "occupation": ["Merchant"],
+        }
+        df = pd.DataFrame(data)
+        csv_buf = io.StringIO()
+        df.to_csv(csv_buf, index=False)
+        media_file, storage_mock = create_csv_media(
+            user=user,
+            file_name="parents_error.csv",
+            content=csv_buf.getvalue().encode("utf-8"),
+        )
+
+        payload = {
+            "organization": str(organization.id),
+            "branch": str(branch.id),
+            "file": str(media_file.id),
+        }
+
+        with storage_mock:
+            response = api_client.post(
+                "/api/parents/bulk-import/",
+                payload,
+                format="json",
+            )
+        assert response.status_code == status.HTTP_202_ACCEPTED
+
+        assert Parent.objects.count() == 0
+        assert User.objects.filter(email="conflict@example.com").exists() is False
+
+        job = ImportJob.objects.last()
+        assert job.module == "parents"
+        assert job.status == ImportJob.Status.FAILED
+        assert job.errors == [
+            {
+                "row": 2,
+                "errors": {
+                    "phone_number": [
+                        (
+                            "A user with this phone number exists but is not a "
+                            "Parent (role: )."
+                        ),
+                    ],
+                },
+            },
+        ]
 
     def test_student_bulk_import_success(
         self,
@@ -115,27 +207,39 @@ class TestStudentAndParentBulkImport:
         df = pd.DataFrame(data)
         csv_buf = io.StringIO()
         df.to_csv(csv_buf, index=False)
-        uploaded_file = SimpleUploadedFile(
-            "students.csv",
-            csv_buf.getvalue().encode("utf-8"),
-            content_type="text/csv",
+        media_file, storage_mock = create_csv_media(
+            user=user,
+            file_name="students.csv",
+            content=csv_buf.getvalue().encode("utf-8"),
         )
 
         payload = {
             "organization": str(organization.id),
             "branch": str(branch.id),
-            "file": uploaded_file,
+            "file": str(media_file.id),
         }
 
-        response = api_client.post(
-            "/api/students/bulk-import/",
-            payload,
-            format="multipart",
-        )
+        with storage_mock:
+            response = api_client.post(
+                "/api/students/bulk-import/",
+                payload,
+                format="json",
+            )
         assert response.status_code == status.HTTP_202_ACCEPTED
 
-        assert Student.objects.filter(roll_no="R501", current_section=section).exists()
-        assert Student.objects.filter(first_name="Bob", current_section=None).exists()
+        alice = Student.objects.get(roll_no="R501", current_section=section)
+        assert alice.first_name == "Alice"
+        assert alice.last_name == "Green"
+        assert alice.gender == "FEMALE"
+        assert str(alice.date_of_birth) == "2015-05-20"
+        assert alice.admission_date == date(2023, 9, 1)
+
+        bob = Student.objects.get(first_name="Bob", current_section=None)
+        assert bob.last_name == "Brown"
+        assert bob.gender == "MALE"
+        assert str(bob.date_of_birth) == "2016-06-18"
+        assert bob.admission_date == timezone.now().date()
+        assert bob.roll_no.startswith("STU-")
 
         # Verify parent links
         student_alice = Student.objects.get(roll_no="R501")
@@ -144,3 +248,68 @@ class TestStudentAndParentBulkImport:
             parent=parent_profile,
             relationship_type="MOTHER",
         ).exists()
+        link = ParentStudentLink.objects.get(
+            student=student_alice,
+            parent=parent_profile,
+        )
+        assert link.is_primary_contact is False
+
+    def test_student_bulk_import_validation_error_rolls_back_everything(
+        self,
+        api_client,
+        user,
+        organization,
+        branch,
+        section,
+    ):
+        api_client.force_authenticate(user=user)
+
+        data = {
+            "first_name": ["Alice", "Bob"],
+            "last_name": ["Green", "Brown"],
+            "gender": ["FEMALE", "MALE"],
+            "date_of_birth": ["2015-05-20", "2016-06-18"],
+            "roll_no": ["R700", "R700"],
+            "section_name": ["Section A", "Section A"],
+            "grade_name": ["Grade 9", "Grade 9"],
+            "admission_date": ["2023-09-01", "2023-09-02"],
+        }
+        df = pd.DataFrame(data)
+        csv_buf = io.StringIO()
+        df.to_csv(csv_buf, index=False)
+        media_file, storage_mock = create_csv_media(
+            user=user,
+            file_name="students_error.csv",
+            content=csv_buf.getvalue().encode("utf-8"),
+        )
+
+        payload = {
+            "organization": str(organization.id),
+            "branch": str(branch.id),
+            "file": str(media_file.id),
+        }
+
+        with storage_mock:
+            response = api_client.post(
+                "/api/students/bulk-import/",
+                payload,
+                format="json",
+            )
+        assert response.status_code == status.HTTP_202_ACCEPTED
+
+        assert Student.objects.count() == 0
+        assert ParentStudentLink.objects.count() == 0
+
+        job = ImportJob.objects.last()
+        assert job.module == "students"
+        assert job.status == ImportJob.Status.FAILED
+        assert job.errors == [
+            {
+                "row": 3,
+                "errors": {
+                    "roll_no": [
+                        "Duplicate roll number in this section within the sheet.",
+                    ],
+                },
+            },
+        ]

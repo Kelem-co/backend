@@ -1,15 +1,26 @@
 import io
 import uuid
-from datetime import datetime
+from typing import Any
 
 import pandas as pd
 from accounts.models import User
 from branches.models import Branch
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
+from django.db import DatabaseError
 from django.db import transaction
+from django.utils import timezone
 from organizations.models import Organization
 from teachers.models import Teacher
+
+FILE_PARSE_EXCEPTIONS = (
+    pd.errors.EmptyDataError,
+    pd.errors.ParserError,
+    UnicodeDecodeError,
+    ValueError,
+)
+DATE_PARSE_EXCEPTIONS = (TypeError, ValueError)
+BRANCH_NOT_FOUND_MESSAGE = "Branch not found or does not belong to organization."
 
 
 class TeacherBulkImportService:
@@ -18,37 +29,40 @@ class TeacherBulkImportService:
         self.file_name = file_name
         self.organization_id = organization_id
         self.branch_id = branch_id
-        self.errors = []  # List of dicts: {"row": int, "errors": dict}
+        self.errors: list[dict[str, Any]] = []
 
-    def run(self) -> tuple[bool, list[dict]]:  # noqa: C901, PLR0911, PLR0912, PLR0915
-        # 1. Parse File using Pandas
+    def run(self) -> tuple[bool, list[dict[str, Any]]]:
+        dataframe, parse_errors = self._parse_dataframe()
+        if parse_errors:
+            return False, parse_errors
+
+        org, branch, context_errors = self._get_context()
+        if context_errors:
+            return False, context_errors
+
+        prepared_rows = self._validate_rows(dataframe, branch)
+        if self.errors:
+            return False, self.errors
+
+        self._create_teachers(prepared_rows, org, branch)
+        return True, []
+
+    def _parse_dataframe(self) -> tuple[pd.DataFrame | None, list[dict[str, Any]]]:
         try:
             if self.file_name.endswith(".csv"):
-                # CSV files can be parsed from bytes via string decoding
                 data = io.StringIO(self.file_content.decode("utf-8"))
-                df = pd.read_csv(data)
+                dataframe = pd.read_csv(data, dtype=str, keep_default_na=False)
             elif self.file_name.endswith((".xls", ".xlsx")):
-                # Excel files can be parsed from bytes via BytesIO
                 data = io.BytesIO(self.file_content)
-                df = pd.read_excel(data)
+                dataframe = pd.read_excel(data, dtype=str, keep_default_na=False)
             else:
-                return False, [
-                    {
-                        "row": 0,
-                        "errors": {
-                            "file": [
-                                "Unsupported file format. Please upload CSV or Excel.",
-                            ],
-                        },
-                    },
-                ]
-        except Exception as e:  # noqa: BLE001
-            return False, [
-                {"row": 0, "errors": {"file": [f"Failed to parse file: {e!s}"]}},
-            ]
+                return None, [self._error(0, "file", self._unsupported_file_message())]
+        except FILE_PARSE_EXCEPTIONS as exc:
+            return None, [self._error(0, "file", f"Failed to parse file: {exc!s}")]
 
-        # Trim column names
-        df.columns = [str(c).strip().lower() for c in df.columns]
+        dataframe.columns = [
+            str(column).strip().lower() for column in dataframe.columns
+        ]
 
         required_columns = [
             "name",
@@ -57,215 +71,240 @@ class TeacherBulkImportService:
             "email",
             "phone_number",
         ]
-        missing_columns = [col for col in required_columns if col not in df.columns]
+        missing_columns = [
+            column for column in required_columns if column not in dataframe.columns
+        ]
         if missing_columns:
-            return False, [
-                {
-                    "row": 0,
-                    "errors": {
-                        "columns": [
-                            f"Missing required columns: {', '.join(missing_columns)}",
-                        ],
-                    },
-                },
+            return None, [
+                self._error(
+                    0,
+                    "columns",
+                    f"Missing required columns: {', '.join(missing_columns)}",
+                ),
             ]
 
-        # Replace NaN values with None/empty string for easier processing
-        df = df.fillna("")
+        return dataframe.fillna(""), []
+
+    def _get_context(
+        self,
+    ) -> tuple[Organization | None, Branch | None, list[dict[str, Any]]]:
+        try:
+            organization = Organization.objects.get(id=self.organization_id)
+        except Organization.DoesNotExist:
+            return (
+                None,
+                None,
+                [
+                    self._error(0, "organization", "Organization not found."),
+                ],
+            )
 
         try:
+            branch = Branch.objects.get(id=self.branch_id, organization=organization)
+        except Branch.DoesNotExist:
+            return None, None, [self._error(0, "branch", BRANCH_NOT_FOUND_MESSAGE)]
+
+        return organization, branch, []
+
+    def _validate_rows(
+        self,
+        dataframe: pd.DataFrame,
+        branch: Branch,
+    ) -> list[dict[str, Any]]:
+        prepared_rows: list[dict[str, Any]] = []
+        seen_emails: set[str] = set()
+        seen_employee_ids: set[str] = set()
+
+        for index, row in dataframe.iterrows():
+            row_number = index + 2
+            row_errors: dict[str, list[str]] = {}
+            prepared_row = self._build_row_payload(
+                row=row,
+                branch=branch,
+                seen_values={
+                    "emails": seen_emails,
+                    "employee_ids": seen_employee_ids,
+                },
+                row_errors=row_errors,
+            )
+
+            if row_errors:
+                self.errors.append({"row": row_number, "errors": row_errors})
+                continue
+
+            prepared_rows.append(prepared_row)
+
+        return prepared_rows
+
+    def _build_row_payload(
+        self,
+        *,
+        row: pd.Series,
+        branch: Branch,
+        seen_values: dict[str, set[str]],
+        row_errors: dict[str, list[str]],
+    ) -> dict[str, Any]:
+        name = self._text_value(row, "name")
+        email = self._text_value(row, "email")
+        employee_id = self._text_value(row, "employee_id")
+        father_name = self._text_value(row, "father_name")
+        grandfather_name = self._text_value(row, "grandfather_name")
+        phone_number = self._text_value(row, "phone_number")
+        specialization = self._text_value(row, "specialization")
+        bio = self._text_value(row, "bio")
+        joining_date = self._resolve_joining_date(
+            row.get("joining_date"),
+            row_errors,
+        )
+
+        if not name:
+            row_errors["name"] = ["Name is required."]
+        if not father_name:
+            row_errors["father_name"] = ["Father name is required."]
+        if not grandfather_name:
+            row_errors["grandfather_name"] = ["Grandfather name is required."]
+
+        self._validate_email(email, row_errors, seen_values["emails"])
+        employee_id = self._validate_employee_id(
+            employee_id,
+            row_errors,
+            seen_values["employee_ids"],
+        )
+        self._validate_phone_number(phone_number, row_errors)
+
+        return {
+            "name": name,
+            "email": email,
+            "employee_id": employee_id,
+            "joining_date": joining_date,
+            "father_name": father_name,
+            "grandfather_name": grandfather_name,
+            "phone_number": phone_number,
+            "specialization": specialization,
+            "bio": bio,
+            "branch": branch,
+        }
+
+    def _validate_email(
+        self,
+        email: str,
+        row_errors: dict[str, list[str]],
+        seen_emails: set[str],
+    ) -> None:
+        if not email:
+            row_errors["email"] = ["Email is required."]
+            return
+
+        try:
+            validate_email(email)
+        except ValidationError:
+            row_errors["email"] = ["Invalid email format."]
+            return
+
+        normalized_email = email.lower()
+        if normalized_email in seen_emails:
+            row_errors["email"] = ["Duplicate email in the sheet."]
+            return
+
+        seen_emails.add(normalized_email)
+        if User.objects.filter(email__iexact=email).exists():
+            row_errors["email"] = ["A user with this email already exists."]
+
+    def _validate_employee_id(
+        self,
+        employee_id: str,
+        row_errors: dict[str, list[str]],
+        seen_employee_ids: set[str],
+    ) -> str:
+        if not employee_id:
+            return f"EMP-{uuid.uuid4().hex[:8].upper()}"
+
+        normalized_employee_id = employee_id.lower()
+        if normalized_employee_id in seen_employee_ids:
+            row_errors["employee_id"] = ["Duplicate Employee ID in the sheet."]
+            return employee_id
+
+        seen_employee_ids.add(normalized_employee_id)
+        if Teacher.objects.filter(employee_id__iexact=employee_id).exists():
+            row_errors["employee_id"] = [
+                "Teacher with this Employee ID already exists.",
+            ]
+
+        return employee_id
+
+    def _validate_phone_number(
+        self,
+        phone_number: str,
+        row_errors: dict[str, list[str]],
+    ) -> None:
+        if not phone_number:
+            row_errors["phone_number"] = ["Phone number is required."]
+            return
+
+        if User.objects.filter(phone_number=phone_number).exists():
+            row_errors["phone_number"] = [
+                "A user with this phone number already exists.",
+            ]
+
+    def _resolve_joining_date(
+        self,
+        joining_date_raw: Any,
+        row_errors: dict[str, list[str]],
+    ):
+        if joining_date_raw is None or str(joining_date_raw).strip() == "":
+            return timezone.now().date()
+
+        try:
+            return pd.to_datetime(joining_date_raw).date()
+        except DATE_PARSE_EXCEPTIONS:
+            row_errors["joining_date"] = ["Invalid date format. Use YYYY-MM-DD."]
+            return None
+
+    def _create_teachers(
+        self,
+        prepared_rows: list[dict[str, Any]],
+        organization: Organization,
+        branch: Branch,
+    ) -> None:
+        try:
             with transaction.atomic():
-                # Verify that organization and branch exist and match
-                try:
-                    org = Organization.objects.get(id=self.organization_id)
-                except Organization.DoesNotExist:
-                    return False, [
-                        {
-                            "row": 0,
-                            "errors": {"organization": ["Organization not found."]},
-                        },
-                    ]
-
-                try:
-                    branch = Branch.objects.get(id=self.branch_id, organization=org)
-                except Branch.DoesNotExist:
-                    return False, [
-                        {
-                            "row": 0,
-                            "errors": {
-                                "branch": [
-                                    (
-                                        "Branch not found or does not belong to "
-                                        "organization."
-                                    ),
-                                ],
-                            },
-                        },
-                    ]
-
-                # Temporary memory tracking to prevent duplicates within the same sheet
-                seen_emails = set()
-                seen_employee_ids = set()
-
-                for index, row in df.iterrows():
-                    row_num = index + 2  # 1-indexed plus header row is row 2
-                    row_errors = {}
-
-                    # Extract values
-                    name = (
-                        str(row.get("name")).strip()
-                        if row.get("name") is not None
-                        else ""
-                    )
-                    email = (
-                        str(row.get("email")).strip()
-                        if row.get("email") is not None
-                        else ""
-                    )
-                    employee_id = (
-                        str(row.get("employee_id")).strip()
-                        if row.get("employee_id") is not None
-                        else ""
-                    )
-                    joining_date_raw = row.get("joining_date")
-
-                    father_name = (
-                        str(row.get("father_name")).strip()
-                        if row.get("father_name") is not None
-                        else ""
-                    )
-                    grandfather_name = (
-                        str(row.get("grandfather_name")).strip()
-                        if row.get("grandfather_name") is not None
-                        else ""
-                    )
-                    phone_number = (
-                        str(row.get("phone_number")).strip()
-                        if row.get("phone_number") is not None
-                        else ""
-                    )
-                    specialization = (
-                        str(row.get("specialization")).strip()
-                        if row.get("specialization") is not None
-                        else ""
-                    )
-                    bio = (
-                        str(row.get("bio")).strip()
-                        if row.get("bio") is not None
-                        else ""
-                    )
-
-                    # Validate Name
-                    if not name:
-                        row_errors["name"] = ["Name is required."]
-
-                    # Validate Email
-                    if not email:
-                        row_errors["email"] = ["Email is required."]
-                    else:
-                        try:
-                            validate_email(email)
-                        except ValidationError:
-                            row_errors["email"] = ["Invalid email format."]
-
-                        if email.lower() in seen_emails:
-                            row_errors["email"] = ["Duplicate email in the sheet."]
-                        else:
-                            seen_emails.add(email.lower())
-
-                            # Check database uniqueness
-                            if User.objects.filter(email__iexact=email).exists():
-                                row_errors["email"] = [
-                                    "A user with this email already exists.",
-                                ]
-
-                    # Validate Employee ID
-                    if not employee_id:
-                        employee_id = f"EMP-{uuid.uuid4().hex[:8].upper()}"
-                    elif employee_id.lower() in seen_employee_ids:
-                        row_errors["employee_id"] = [
-                            "Duplicate Employee ID in the sheet.",
-                        ]
-                    else:
-                        seen_employee_ids.add(employee_id.lower())
-
-                        # Check database uniqueness
-                        if Teacher.objects.filter(
-                            employee_id__iexact=employee_id,
-                        ).exists():
-                            row_errors["employee_id"] = [
-                                "Teacher with this Employee ID already exists.",
-                            ]
-
-                    # Validate Joining Date
-                    joining_date = None
-                    if joining_date_raw is None or str(joining_date_raw).strip() == "":
-                        joining_date = datetime.datetime.now(tz=datetime.UTC).date()
-                    else:
-                        try:
-                            joining_date = pd.to_datetime(joining_date_raw).date()
-                        except Exception:  # noqa: BLE001
-                            row_errors["joining_date"] = [
-                                "Invalid date format. Use YYYY-MM-DD.",
-                            ]
-
-                    # Validate Father Name
-                    if not father_name:
-                        row_errors["father_name"] = ["Father name is required."]
-
-                    # Validate Grandfather Name
-                    if not grandfather_name:
-                        row_errors["grandfather_name"] = [
-                            "Grandfather name is required.",
-                        ]
-
-                    # Validate Phone Number
-                    if not phone_number:
-                        row_errors["phone_number"] = ["Phone number is required."]
-                    elif User.objects.filter(phone_number=phone_number).exists():
-                        row_errors["phone_number"] = [
-                            "A user with this phone number already exists.",
-                        ]
-
-                    # If errors in this row, skip creation and log errors
-                    if row_errors:
-                        self.errors.append({"row": row_num, "errors": row_errors})
-                        continue
-
-                    # Create User
+                for row_data in prepared_rows:
                     user = User.objects.create_user(
-                        email=email,
-                        name=name,
-                        father_name=father_name,
-                        grandfather_name=grandfather_name,
-                        phone_number=phone_number if phone_number else None,
+                        email=row_data["email"],
+                        name=row_data["name"],
+                        father_name=row_data["father_name"],
+                        grandfather_name=row_data["grandfather_name"],
+                        phone_number=row_data["phone_number"] or None,
                         role=User.Role.TEACHER,
                     )
                     user.set_unusable_password()
                     user.save()
 
-                    # Create Teacher Profile
                     Teacher.objects.create(
                         user=user,
-                        organization=org,
+                        organization=organization,
                         branch=branch,
-                        employee_id=employee_id,
-                        joining_date=joining_date,
-                        specialization=specialization,
-                        bio=bio,
+                        employee_id=row_data["employee_id"],
+                        joining_date=row_data["joining_date"],
+                        specialization=row_data["specialization"],
+                        bio=row_data["bio"],
                     )
+        except DatabaseError as exc:
+            self.errors.append(
+                self._error(0, "server", f"Internal error: {exc!s}"),
+            )
 
-                if self.errors:
-                    raise transaction.Rollback  # noqa: TRY301
+    @staticmethod
+    def _text_value(row: pd.Series, key: str) -> str:
+        value = row.get(key)
+        if value is None:
+            return ""
+        return str(value).strip()
 
-        except Exception as e:  # noqa: BLE001
-            if not self.errors:
-                self.errors.append(
-                    {"row": 0, "errors": {"server": [f"Internal error: {e!s}"]}},
-                )
-            return False, self.errors
+    @staticmethod
+    def _unsupported_file_message() -> str:
+        return "Unsupported file format. Please upload CSV or Excel."
 
-        if self.errors:
-            return False, self.errors
-
-        return True, []
+    @staticmethod
+    def _error(row: int, field: str, message: str) -> dict[str, Any]:
+        return {"row": row, "errors": {field: [message]}}

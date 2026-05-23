@@ -62,6 +62,7 @@ Run tests in the Docker environment by default. Do not use host-local pytest for
 
 - Prefer `docker compose -f docker-compose.local.yml run --rm django pytest` for the full test suite.
 - Prefer the narrowest useful `docker compose -f docker-compose.local.yml run --rm django pytest path/to/test_file.py` or `docker compose -f docker-compose.local.yml run --rm django pytest --filter ...` style invocation when the change is localized.
+- Never run bare `pytest` for normal verification in this repo. Use the Docker form above unless the user explicitly asks for host-local pytest.
 - Use the existing `core/users/tests/` layout as the model for new app tests.
 - Use factory-boy factories from `core/users/tests/factories.py` or similar app-local factories instead of ad hoc object setup when possible.
 - Keep tests close to the app they cover and name them to match the existing `test_*.py` pattern.
@@ -74,6 +75,8 @@ The project’s developer tooling is already configured in `pyproject.toml` and 
 
 - Use `docker compose -f docker-compose.local.yml run --rm django uv run mypy core` for type checking.
 - Use Ruff for Python linting and formatting according to the repo configuration.
+- Run Ruff from the project virtualenv, not from an arbitrary global install: `source .venv/bin/activate && ruff check . --exclude .agents`.
+- When running focused Ruff checks, still exclude `.agents` explicitly.
 - Use `djlint` conventions for Django templates.
 - Respect the migration exclusion in Ruff and the existing mypy Django/DRF plugins.
 - Prefer explicit type hints and explicit return types in Python code.
@@ -86,6 +89,7 @@ If you touch Python code, expect to format or lint according to the repo configu
 Use the repo’s existing commands instead of inventing new ones.
 
 - Use Docker-based commands by default for this repository, including focused test and verification runs.
+- For verification, the default split is: Docker for `pytest`, local virtualenv for `ruff check`, and explicit `.agents` exclusion for Ruff.
 - Use `just` for common container and management tasks.
 - Use `just build`, `just up`, `just down`, `just logs`, and `just manage ...` when working with the Dockerized local environment.
 - Use `docker compose -f docker-compose.local.yml run --rm django uv run python manage.py createsuperuser` for superuser creation when needed.
