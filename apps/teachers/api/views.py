@@ -1,17 +1,38 @@
+import secrets
+
+from accounts.email import TeacherInvitationEmail
+from accounts.models import User
 from branches.models import Branch
+from django.contrib.auth.tokens import default_token_generator
+from django.db import transaction
 from django.db.models import Prefetch
+from django.db.models import Q
+from django.utils import timezone
+from django.utils.encoding import force_bytes
+from django.utils.encoding import force_str
+from django.utils.http import urlsafe_base64_decode
+from django.utils.http import urlsafe_base64_encode
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter
+from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import extend_schema_view
+from drf_spectacular.utils import inline_serializer
+from rest_framework import serializers
 from rest_framework import status
 from rest_framework import viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.filters import SearchFilter
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 from teachers.models import HomeroomAssignment
 from teachers.models import Teacher
 from teachers.models import TeacherQualification
 from teachers.models import TeacherSubjectAssignment
 
-from core.api.access import scope_queryset_for_user
 from core.api.access import user_can_access_branch
+from core.api.access import user_resource_access_filter
 from core.models import ImportJob
 from core.tasks import process_bulk_import
 
@@ -19,19 +40,69 @@ from .serializers import BulkImportSerializer
 from .serializers import HomeroomAssignmentReadSerializer
 from .serializers import HomeroomAssignmentSerializer
 from .serializers import SectionTeacherScheduleSerializer
+from .serializers import TeacherCompleteInvitationSerializer
+from .serializers import TeacherInviteSerializer
 from .serializers import TeacherQualificationSerializer
 from .serializers import TeacherSectionSerializer
 from .serializers import TeacherSerializer
 from .serializers import TeacherSubjectAssignmentReadSerializer
 from .serializers import TeacherSubjectAssignmentSerializer
 
+TEACHER_LIST_PARAMETERS = [
+    OpenApiParameter(
+        name="organization",
+        type=OpenApiTypes.UUID,
+        location=OpenApiParameter.QUERY,
+        description="Filter teachers by organization ID.",
+        required=False,
+    ),
+    OpenApiParameter(
+        name="branch",
+        type=OpenApiTypes.UUID,
+        location=OpenApiParameter.QUERY,
+        description="Filter teachers by branch ID.",
+        required=False,
+    ),
+    OpenApiParameter(
+        name="user",
+        type=OpenApiTypes.UUID,
+        location=OpenApiParameter.QUERY,
+        description="Filter teachers by related user ID.",
+        required=False,
+    ),
+]
 
+
+def scope_teacher_queryset_for_user(
+    queryset,
+    user,
+    *,
+    own_lookup: str,
+    organization_lookup: str = "organization",
+    branch_lookup: str | None = "branch",
+):
+    """
+    Extend the shared access rules so teachers can access their own records.
+    """
+    access_filter = user_resource_access_filter(
+        user,
+        organization_lookup=organization_lookup,
+        branch_lookup=branch_lookup,
+    )
+    if getattr(user, "is_authenticated", False):
+        access_filter |= Q(**{own_lookup: user})
+    return queryset.filter(access_filter).distinct()
+
+
+@extend_schema_view(
+    list=extend_schema(parameters=TEACHER_LIST_PARAMETERS),
+)
 class TeacherViewSet(viewsets.ModelViewSet):
     """
     CRUD for Teacher profiles.
 
     Search: ?search=<name|employee_id|specialization>
-    Filter: ?organization=<id>, ?branch=<id>
+    Filter: ?organization=<id>, ?branch=<id>, ?user=<id>
 
     Custom actions:
       GET /teachers/<id>/qualifications/  - list qualifications for a teacher
@@ -64,13 +135,20 @@ class TeacherViewSet(viewsets.ModelViewSet):
         if getattr(self, "swagger_fake_view", False):
             return qs.none()
 
-        qs = scope_queryset_for_user(qs, self.request.user)
+        qs = scope_teacher_queryset_for_user(
+            qs,
+            self.request.user,
+            own_lookup="user",
+        )
         org = self.request.query_params.get("organization")
         branch = self.request.query_params.get("branch")
+        user_id = self.request.query_params.get("user")
         if org:
             qs = qs.filter(organization_id=org)
         if branch:
             qs = qs.filter(branch_id=branch)
+        if user_id:
+            qs = qs.filter(user_id=user_id)
         return qs
 
     def get_serializer_class(self):
@@ -128,7 +206,7 @@ class TeacherViewSet(viewsets.ModelViewSet):
     # /teachers/<id>/qualifications/
     # ------------------------------------------------------------------
     @action(detail=True, methods=["get"], url_path="qualifications")
-    def qualifications(self, request, pk=None):
+    def qualifications(self, request, *args, **kwargs):
         """Return all qualifications for this teacher."""
         teacher = self.get_object()
         qs = teacher.qualifications.select_related("certificate_copy", "organization")
@@ -139,7 +217,7 @@ class TeacherViewSet(viewsets.ModelViewSet):
     # /teachers/<id>/assignments/
     # ------------------------------------------------------------------
     @action(detail=True, methods=["get"], url_path="assignments")
-    def assignments(self, request, pk=None):
+    def assignments(self, request, *args, **kwargs):
         """Return all subject assignments for this teacher."""
         teacher = self.get_object()
         qs = teacher.subject_assignments.select_related(
@@ -153,8 +231,28 @@ class TeacherViewSet(viewsets.ModelViewSet):
     # ------------------------------------------------------------------
     # /teachers/<id>/sections/
     # ------------------------------------------------------------------
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="academic_year",
+                type=OpenApiTypes.UUID,
+                location=OpenApiParameter.QUERY,
+                description="Optionally filter sections by academic year ID.",
+                required=False,
+            ),
+        ],
+        responses={
+            status.HTTP_200_OK: inline_serializer(
+                name="TeacherSectionsResponse",
+                fields={
+                    "count": serializers.IntegerField(),
+                    "sections": TeacherSectionSerializer(many=True),
+                },
+            ),
+        },
+    )
     @action(detail=True, methods=["get"], url_path="sections")
-    def sections(self, request, pk=None):
+    def sections(self, request, *args, **kwargs):
         """
         Return the unique sections (with grade and academic year context)
         that this teacher is assigned to teach.
@@ -231,9 +329,10 @@ class TeacherQualificationViewSet(viewsets.ModelViewSet):
         if getattr(self, "swagger_fake_view", False):
             return qs.none()
 
-        qs = scope_queryset_for_user(
+        qs = scope_teacher_queryset_for_user(
             qs,
             self.request.user,
+            own_lookup="teacher__user",
             branch_lookup="teacher__branch",
         )
         teacher_id = self.request.query_params.get("teacher")
@@ -284,9 +383,10 @@ class TeacherSubjectAssignmentViewSet(viewsets.ModelViewSet):
         if getattr(self, "swagger_fake_view", False):
             return qs.none()
 
-        qs = scope_queryset_for_user(
+        qs = scope_teacher_queryset_for_user(
             qs,
             self.request.user,
+            own_lookup="teacher__user",
             branch_lookup="section__branch",
         )
         filters = {}
@@ -411,7 +511,11 @@ class HomeroomAssignmentViewSet(viewsets.ModelViewSet):
         if getattr(self, "swagger_fake_view", False):
             return qs.none()
 
-        qs = scope_queryset_for_user(qs, self.request.user)
+        qs = scope_teacher_queryset_for_user(
+            qs,
+            self.request.user,
+            own_lookup="teacher__user",
+        )
         filters = {}
         for param in ("organization", "branch", "academic_year", "section", "teacher"):
             val = self.request.query_params.get(param)
@@ -473,3 +577,129 @@ class HomeroomAssignmentViewSet(viewsets.ModelViewSet):
 
         serializer = HomeroomAssignmentReadSerializer(qs, many=True)
         return Response(serializer.data)
+
+
+# ---------------------------------------------------------------------------
+# Teacher invitation views
+# ---------------------------------------------------------------------------
+
+
+@extend_schema(request=TeacherInviteSerializer)
+class TeacherInviteView(APIView):
+    """
+    Invite a new teacher by email.
+
+    Creates an inactive User account with role=TEACHER, creates the
+    Teacher profile, and sends an invitation email containing a
+    password-set link.
+
+    The link points to:
+        {FRONTEND_DOMAIN}/complete-teacher-invitation/{uid}/{token}
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = TeacherInviteSerializer(
+            data=request.data,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+
+        data = serializer.validated_data
+        branch: Branch = data["branch"]
+
+        with transaction.atomic():
+            # Keep the invite flow atomic so failed profile/email steps do not
+            # leave behind an unusable inactive user record.
+            random_password = secrets.token_urlsafe(16)
+            user = User.objects.create_user(
+                email=data["email"],
+                password=random_password,
+                name=data["name"],
+                father_name=data["father_name"],
+                grandfather_name=data["grandfather_name"],
+                role=User.Role.TEACHER,
+                is_active=False,
+            )
+
+            Teacher.objects.create(
+                user=user,
+                organization=branch.organization,
+                branch=branch,
+                specialization=data.get("specialization", ""),
+            )
+
+            uid = urlsafe_base64_encode(force_bytes(user.pk))
+            token = default_token_generator.make_token(user)
+            path = f"complete-teacher-invitation/{uid}/{token}"
+
+            email_obj = TeacherInvitationEmail(
+                request,
+                context={
+                    "user": user,
+                    "branch_name": branch.name,
+                    "invited_by": request.user.name,
+                    "url": path,
+                },
+            )
+            email_obj.send([user.email])
+
+        return Response(
+            {"message": "Teacher invitation sent successfully."},
+            status=status.HTTP_201_CREATED,
+        )
+
+
+@extend_schema(request=TeacherCompleteInvitationSerializer)
+class TeacherCompleteInvitationView(APIView):
+    """
+    Complete a teacher invitation by setting a password.
+
+    No authentication required — the uid/token pair from the email
+    acts as the credential.
+
+    On success the user account is activated, verified_at is stamped,
+    and the Teacher profile status is left as-is (teachers have no
+    INACTIVE/ACTIVE status field — the User.is_active flag is the gate).
+    """
+
+    permission_classes = []
+
+    def post(self, request):
+        serializer = TeacherCompleteInvitationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        uid = serializer.validated_data["uid"]
+        token = serializer.validated_data["token"]
+        new_password = serializer.validated_data["new_password"]
+
+        # Decode the user
+        try:
+            user_id = force_str(urlsafe_base64_decode(uid))
+            user = User.objects.get(pk=user_id)
+        except (TypeError, ValueError, OverflowError, User.DoesNotExist) as err:
+            raise ValidationError({"uid": "Invalid user ID."}) from err
+
+        # Guard: must be a pending teacher invitation
+        if user.role != User.Role.TEACHER or user.is_active:
+            raise ValidationError({"uid": "Invalid or expired invitation."})
+
+        # Verify the token
+        if not default_token_generator.check_token(user, token):
+            raise ValidationError({"token": "Invalid or expired token."})
+
+        # Ensure a teacher profile actually exists for this user
+        if not Teacher.objects.filter(user=user).exists():
+            raise ValidationError({"uid": "Invalid or expired invitation."})
+
+        # Activate the account
+        user.set_password(new_password)
+        user.is_active = True
+        user.verified_at = timezone.now()
+        user.save()
+
+        return Response(
+            {"message": "Password set and account activated successfully."},
+            status=status.HTTP_200_OK,
+        )

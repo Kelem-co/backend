@@ -1,0 +1,11 @@
+Hi {{ user.name }},
+
+You have been invited by {{ invited_by }} to join {{ branch_name }} as a Teacher.
+
+Please click the link below to set your password and access your account:
+{{ full_url }}
+
+If you did not expect this invitation, you can ignore this email.
+
+Thanks,
+The Team
