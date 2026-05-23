@@ -9,6 +9,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.db import transaction
+from django.utils import timezone
 
 if TYPE_CHECKING:
     from branches.models import Branch
@@ -16,6 +17,9 @@ if TYPE_CHECKING:
     from .models import AcademicYear
 
 logger = logging.getLogger(__name__)
+
+
+ACADEMIC_YEAR_START_MONTH = 9  # September
 
 
 def current_ethiopian_academic_year_dates(
@@ -37,10 +41,10 @@ def current_ethiopian_academic_year_dates(
     reference_date = 2025-09-01  →  ("2025/2026", 2025-09-01, 2026-07-31)
     """
     if reference_date is None:
-        reference_date = datetime.date.today()
+        reference_date = timezone.now().date()
 
     # If we are in September or later the new year has started
-    if reference_date.month >= 9:
+    if reference_date.month >= ACADEMIC_YEAR_START_MONTH:
         start_year = reference_date.year
     else:
         start_year = reference_date.year - 1

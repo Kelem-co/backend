@@ -48,9 +48,8 @@ def rollover_academic_years(self):
                 updated_count += 1
         except DatabaseError as exc:
             logger.exception(
-                "Failed to rollover academic year for branch %s: %s",
+                "Failed to rollover academic year for branch %s",
                 branch.id,
-                exc,
             )
             error_count += 1
 
