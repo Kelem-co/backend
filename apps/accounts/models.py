@@ -14,10 +14,12 @@ from core.models import UUIDModel
 
 
 class UserManager(BaseUserManager):
-    def create_user(self, email, password=None, **extra_fields):
-        if not email:
+    def create_user(self, email=None, password=None, **extra_fields):
+        role = extra_fields.get("role")
+        if not email and role != "PARENT":
             raise ValueError(_("The Email field must be set"))
-        email = self.normalize_email(email)
+        if email:
+            email = self.normalize_email(email)
         user = self.model(email=email, **extra_fields)
         user.set_password(password)
         user.save(using=self._db)
@@ -47,7 +49,7 @@ class User(UUIDModel, TimeStampedModel, AbstractUser):
         PARENT = "PARENT", _("Parent")
 
     username = None
-    email = EmailField(_("Email Address"), unique=True)
+    email = EmailField(_("Email Address"), unique=True, null=True, blank=True)
     name = CharField(_("First Name"), blank=True, max_length=255)
     father_name = CharField(_("Father's Name"), blank=True, max_length=255)
     grandfather_name = CharField(_("Grandfather's Name"), blank=True, max_length=255)

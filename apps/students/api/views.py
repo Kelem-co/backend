@@ -1,3 +1,4 @@
+from branches.models import Branch
 from drf_spectacular.utils import OpenApiParameter
 from drf_spectacular.utils import OpenApiTypes
 from drf_spectacular.utils import extend_schema
@@ -13,8 +14,12 @@ from students.models import ParentStudentLink
 from students.models import Student
 
 from core.api.access import scope_queryset_for_user
+from core.api.access import user_can_access_branch
 from core.api.access import user_can_access_parent
+from core.models import ImportJob
+from core.tasks import process_bulk_import
 
+from .serializers import BulkImportSerializer
 from .serializers import ParentReadSerializer
 from .serializers import ParentSerializer
 from .serializers import ParentStudentLinkReadSerializer
@@ -231,9 +236,57 @@ class StudentViewSet(viewsets.ModelViewSet):
         return qs
 
     def get_serializer_class(self):
+        if self.action == "bulk_import":
+            return BulkImportSerializer
         if self.action in ["list", "retrieve", "by_section", "by_grade"]:
             return StudentReadSerializer
         return StudentSerializer
+
+    # ------------------------------------------------------------------
+    # POST /students/bulk-import/
+    # ------------------------------------------------------------------
+    @action(detail=False, methods=["post"], url_path="bulk-import")
+    def bulk_import(self, request):
+        """Bulk import students from CSV/Excel."""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        organization_id = serializer.validated_data["organization"]
+        branch_id = serializer.validated_data["branch"]
+        media_file = serializer.validated_data["file"]
+
+        # Permission check
+        try:
+            branch = Branch.objects.select_related("organization").get(
+                id=branch_id,
+                organization_id=organization_id,
+            )
+        except Branch.DoesNotExist:
+            return Response(
+                {"detail": "Branch not found or does not belong to organization."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not user_can_access_branch(request.user, branch):
+            return Response(
+                {"detail": "You do not have permission to import to this branch."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        import_job = ImportJob.objects.create(
+            file=media_file,
+            module="students",
+            organization_id=organization_id,
+            branch_id=branch_id,
+            created_by=request.user,
+        )
+
+        process_bulk_import.delay(str(import_job.id))
+
+        return Response(
+            {"task_id": str(import_job.id), "detail": "Bulk import process started."},
+            status=status.HTTP_202_ACCEPTED,
+        )
 
     # ------------------------------------------------------------------
     # GET /students/by-section/?section=<id>[&status=][&academic_year=]
@@ -334,6 +387,8 @@ class ParentViewSet(viewsets.ModelViewSet):
         return qs.distinct()
 
     def get_serializer_class(self):
+        if self.action == "bulk_import":
+            return BulkImportSerializer
         if self.action in [
             "list",
             "retrieve",
@@ -347,6 +402,52 @@ class ParentViewSet(viewsets.ModelViewSet):
         ]:
             return ParentReadSerializer
         return ParentSerializer
+
+    # ------------------------------------------------------------------
+    # POST /parents/bulk-import/
+    # ------------------------------------------------------------------
+    @action(detail=False, methods=["post"], url_path="bulk-import")
+    def bulk_import(self, request):
+        """Bulk import parents from CSV/Excel."""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        organization_id = serializer.validated_data["organization"]
+        branch_id = serializer.validated_data["branch"]
+        media_file = serializer.validated_data["file"]
+
+        # Permission check
+        try:
+            branch = Branch.objects.select_related("organization").get(
+                id=branch_id,
+                organization_id=organization_id,
+            )
+        except Branch.DoesNotExist:
+            return Response(
+                {"detail": "Branch not found or does not belong to organization."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not user_can_access_branch(request.user, branch):
+            return Response(
+                {"detail": "You do not have permission to import to this branch."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        import_job = ImportJob.objects.create(
+            file=media_file,
+            module="parents",
+            organization_id=organization_id,
+            branch_id=branch_id,
+            created_by=request.user,
+        )
+
+        process_bulk_import.delay(str(import_job.id))
+
+        return Response(
+            {"task_id": str(import_job.id), "detail": "Bulk import process started."},
+            status=status.HTTP_202_ACCEPTED,
+        )
 
     @action(detail=False, methods=["get"], url_path="by-branch")
     @extend_schema(parameters=PARENT_BY_BRANCH_PARAMETERS)

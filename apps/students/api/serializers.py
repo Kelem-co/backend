@@ -301,3 +301,9 @@ class ParentStudentLinkReadSerializer(ParentStudentLinkSerializer):
             "student_details",
             "parent_details",
         ]
+
+
+class BulkImportSerializer(serializers.Serializer):
+    file = MediaFileReferenceField()
+    organization = serializers.UUIDField()
+    branch = serializers.UUIDField()

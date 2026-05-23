@@ -258,3 +258,9 @@ class HomeroomAssignmentReadSerializer(HomeroomAssignmentSerializer):
             "branch_name",
             "organization_name",
         ]
+
+
+class BulkImportSerializer(serializers.Serializer):
+    file = MediaFileReferenceField()
+    organization = serializers.UUIDField()
+    branch = serializers.UUIDField()

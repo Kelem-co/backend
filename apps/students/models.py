@@ -105,14 +105,16 @@ class Student(UUIDModel, TimeStampedModel):
     last_name = models.CharField(_("Last Name"), max_length=255)
     gender = models.CharField(_("Gender"), max_length=10, choices=Gender.choices)
     date_of_birth = models.DateField(_("Date of Birth"))
-    roll_no = models.CharField(_("Roll Number"), max_length=50)
+    roll_no = models.CharField(_("Roll Number"), max_length=50, default="", blank=True)
     current_section = models.ForeignKey(
         "academics.Section",
         on_delete=models.PROTECT,
         related_name="students",
         verbose_name=_("Current Section"),
+        null=True,
+        blank=True,
     )
-    admission_date = models.DateField(_("Admission Date"))
+    admission_date = models.DateField(_("Admission Date"), null=True, blank=True)
     photo = models.ForeignKey(
         "media.MediaFile",
         verbose_name=_("Photo"),

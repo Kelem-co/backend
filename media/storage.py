@@ -202,6 +202,17 @@ class S3StorageClient:
             logger.exception("Error checking object: key=%s", key)
             raise
 
+    def get_object_bytes(self, key: str) -> bytes:
+        try:
+            response = self.client.get_object(Bucket=self.bucket, Key=key)
+        except ClientError as exc:
+            logger.exception("Failed to download object: key=%s", key)
+            msg = f"Failed to download object: {key}"
+            raise OSError(msg) from exc
+        else:
+            body = response["Body"]
+            return body.read()
+
     def delete_object(self, key: str) -> bool:
         try:
             self.client.delete_object(Bucket=self.bucket, Key=key)
