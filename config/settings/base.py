@@ -349,6 +349,17 @@ CELERY_TASK_TIME_LIMIT = 5 * 60
 CELERY_TASK_SOFT_TIME_LIMIT = 60
 # https://docs.celeryq.dev/en/stable/userguide/configuration.html#beat-scheduler
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
+# Periodic tasks
+# Run academic year rollover every year on September 1st at 00:05 UTC
+# (Ethiopian new academic year starts September 1)
+from celery.schedules import crontab  # noqa: E402
+
+CELERY_BEAT_SCHEDULE = {
+    "rollover-academic-years-annually": {
+        "task": "academics.tasks.rollover_academic_years",
+        "schedule": crontab(minute=5, hour=0, day_of_month=1, month_of_year=9),
+    },
+}
 # https://docs.celeryq.dev/en/stable/userguide/configuration.html#worker-send-task-events
 CELERY_WORKER_SEND_TASK_EVENTS = True
 # https://docs.celeryq.dev/en/stable/userguide/configuration.html#std-setting-task_send_sent_event
