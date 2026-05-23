@@ -26,6 +26,8 @@ from students.api.views import ParentStudentLinkViewSet
 from students.api.views import ParentViewSet
 from students.api.views import StudentViewSet
 from teachers.api.views import HomeroomAssignmentViewSet
+from teachers.api.views import TeacherCompleteInvitationView
+from teachers.api.views import TeacherInviteView
 from teachers.api.views import TeacherQualificationViewSet
 from teachers.api.views import TeacherSubjectAssignmentViewSet
 from teachers.api.views import TeacherViewSet
@@ -99,6 +101,16 @@ urlpatterns = [
         "branch-admins/complete-invitation/",
         BranchAdminCompleteInvitationView.as_view(),
         name="branch-admin-complete-invitation",
+    ),
+    path(
+        "teachers/invite/",
+        TeacherInviteView.as_view(),
+        name="teacher-invite",
+    ),
+    path(
+        "teachers/complete-invitation/",
+        TeacherCompleteInvitationView.as_view(),
+        name="teacher-complete-invitation",
     ),
     path(
         "import-status/<str:task_id>/",

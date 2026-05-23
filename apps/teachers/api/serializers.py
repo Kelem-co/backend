@@ -288,3 +288,56 @@ class TeacherSectionSerializer(serializers.Serializer):
     academic_year_id = serializers.UUIDField()
     academic_year_name = serializers.CharField()
     subjects = serializers.ListField(child=serializers.DictField())
+
+
+# ---------------------------------------------------------------------------
+# Teacher invitation
+# ---------------------------------------------------------------------------
+
+
+class TeacherInviteSerializer(serializers.Serializer):
+    """Payload for inviting a new teacher by email."""
+
+    email = serializers.EmailField()
+    name = serializers.CharField(max_length=255)
+    father_name = serializers.CharField(max_length=255)
+    grandfather_name = serializers.CharField(max_length=255)
+    specialization = serializers.CharField(max_length=255, required=False, default="")
+    # branch queryset is resolved lazily to avoid circular imports at module load
+    branch = serializers.PrimaryKeyRelatedField(read_only=True)
+
+    EMAIL_VALIDATION_ERROR_MESSAGE = "A user with this email already exists."
+
+    def get_fields(self):
+        from branches.models import Branch  # noqa: PLC0415
+
+        fields = super().get_fields()
+        fields["branch"] = serializers.PrimaryKeyRelatedField(
+            queryset=Branch.objects.all(),
+        )
+        return fields
+
+    def validate_email(self, value: str) -> str:
+        from accounts.models import User  # noqa: PLC0415
+
+        if User.objects.filter(email=value).exists():
+            raise serializers.ValidationError(self.EMAIL_VALIDATION_ERROR_MESSAGE)
+        return value
+
+    def validate(self, attrs: dict) -> dict:
+        request = self.context.get("request")
+        branch = attrs.get("branch")
+        if request and branch:
+            if branch.organization.owner_id != request.user.id:
+                raise serializers.ValidationError(
+                    {"branch": "You can only manage branches in your organizations."},
+                )
+        return attrs
+
+
+class TeacherCompleteInvitationSerializer(serializers.Serializer):
+    """Payload for completing a teacher invitation (set password)."""
+
+    uid = serializers.CharField()
+    token = serializers.CharField()
+    new_password = serializers.CharField(style={"input_type": "password"})
