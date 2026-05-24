@@ -5,6 +5,8 @@ from unittest.mock import patch
 import pytest
 from accounts.models import User
 from accounts.tests.factories import UserFactory
+from branches.models import BranchAdmin
+from branches.tests.factories import BranchAdminFactory
 from branches.tests.factories import BranchFactory
 from django.contrib.auth.tokens import default_token_generator
 from django.utils.encoding import force_bytes
@@ -112,6 +114,45 @@ class TestTeacherInviteView:
         assert response.status_code == status.HTTP_201_CREATED
         assert User.objects.filter(email="superteacher@example.com").exists()
         assert Teacher.objects.filter(user__email="superteacher@example.com").exists()
+        assert mock_send_email.called
+
+    @patch("accounts.email.send_email_task.delay")
+    def test_invite_allows_active_branch_admin_for_own_branch(
+        self,
+        mock_send_email,
+        api_rf: APIRequestFactory,
+    ):
+        branch_admin_user = UserFactory()
+        branch = BranchFactory()
+        BranchAdminFactory(
+            user=branch_admin_user,
+            branch=branch,
+            organization=branch.organization,
+            status=BranchAdmin.Status.ACTIVE,
+        )
+
+        view = TeacherInviteView.as_view()
+        request = api_rf.post(
+            "/fake-url/",
+            {
+                "email": "branchadminteacher@example.com",
+                "name": "Branch",
+                "father_name": "Admin",
+                "grandfather_name": "Teacher",
+                "specialization": "Amharic",
+                "branch": branch.id,
+            },
+        )
+        request.user = branch_admin_user
+
+        response = view(request)
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert User.objects.filter(email="branchadminteacher@example.com").exists()
+        assert Teacher.objects.filter(
+            user__email="branchadminteacher@example.com",
+            branch=branch,
+        ).exists()
         assert mock_send_email.called
 
     @patch("accounts.email.send_email_task.delay", side_effect=RuntimeError("boom"))
