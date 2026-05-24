@@ -125,24 +125,49 @@ class OrganizationAdmin(admin.ModelAdmin):
             review_url,
         )
 
+    def _sync_review_state(
+        self,
+        organization: Organization,
+        *,
+        set_checked_at: bool,
+    ) -> list[str]:
+        update_fields = ["status"]
+
+        if organization.verification_status == Organization.VerificationStatus.VERIFIED:
+            organization.status = Organization.Status.ACTIVE
+            organization.verification_failure_reason = ""
+            update_fields.append("verification_failure_reason")
+        else:
+            organization.status = Organization.Status.PENDING
+            if (
+                organization.verification_status
+                == Organization.VerificationStatus.PENDING_MANUAL_REVIEW
+                and not organization.verification_failure_reason
+            ):
+                organization.verification_failure_reason = "manual_review_required"
+                update_fields.append("verification_failure_reason")
+
+        if set_checked_at:
+            organization.verification_checked_at = timezone.now()
+            update_fields.append("verification_checked_at")
+
+        return update_fields
+
+    def save_model(self, request, obj, form, change):
+        set_checked_at = "verification_status" in form.changed_data
+        self._sync_review_state(obj, set_checked_at=set_checked_at)
+        super().save_model(request, obj, form, change)
+
     def approve_view(
         self,
         request: HttpRequest,
         object_id: str,
     ) -> HttpResponseRedirect:
         organization = get_object_or_404(Organization, pk=object_id)
-        organization.status = Organization.Status.ACTIVE
         organization.verification_status = Organization.VerificationStatus.VERIFIED
-        organization.verification_failure_reason = ""
-        organization.verification_checked_at = timezone.now()
+        update_fields = self._sync_review_state(organization, set_checked_at=True)
         organization.save(
-            update_fields=[
-                "status",
-                "verification_status",
-                "verification_failure_reason",
-                "verification_checked_at",
-                "updated_at",
-            ],
+            update_fields=["verification_status", *update_fields, "updated_at"],
         )
         self.message_user(request, "Organization approved successfully.")
         return HttpResponseRedirect(
@@ -158,21 +183,12 @@ class OrganizationAdmin(admin.ModelAdmin):
         object_id: str,
     ) -> HttpResponseRedirect:
         organization = get_object_or_404(Organization, pk=object_id)
-        organization.status = Organization.Status.PENDING
         organization.verification_status = (
             Organization.VerificationStatus.PENDING_MANUAL_REVIEW
         )
-        if not organization.verification_failure_reason:
-            organization.verification_failure_reason = "manual_review_required"
-        organization.verification_checked_at = timezone.now()
+        update_fields = self._sync_review_state(organization, set_checked_at=True)
         organization.save(
-            update_fields=[
-                "status",
-                "verification_status",
-                "verification_failure_reason",
-                "verification_checked_at",
-                "updated_at",
-            ],
+            update_fields=["verification_status", *update_fields, "updated_at"],
         )
         self.message_user(request, "Organization moved to manual review.")
         return HttpResponseRedirect(
