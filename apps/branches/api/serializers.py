@@ -128,14 +128,22 @@ class BranchAdminInviteSerializer(serializers.Serializer):
 
     EMAIL_VALIDATION_ERROR_MESSAGE = "A user with this email already exists."
 
-    def validate_email(self, value):
-        if User.objects.filter(email=value).exists():
-            raise serializers.ValidationError(self.EMAIL_VALIDATION_ERROR_MESSAGE)
-        return value
-
     def validate(self, attrs):
         request = self.context.get("request")
         branch = attrs.get("branch")
+        existing_user = User.objects.filter(email=attrs["email"]).first()
+
+        if existing_user is not None:
+            if (
+                existing_user.role != User.Role.BRANCH_ADMIN
+                or existing_user.is_active
+                or not BranchAdmin.objects.filter(user=existing_user).exists()
+            ):
+                raise serializers.ValidationError(
+                    {"email": self.EMAIL_VALIDATION_ERROR_MESSAGE},
+                )
+            attrs["existing_user"] = existing_user
+
         if request and branch:
             if branch.organization.owner_id != request.user.id:
                 raise serializers.ValidationError(

@@ -8,6 +8,7 @@ from accounts.tests.factories import UserFactory
 from branches.models import BranchAdmin
 from branches.tests.factories import BranchAdminFactory
 from branches.tests.factories import BranchFactory
+from django.conf import settings
 from django.contrib.auth.tokens import default_token_generator
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
@@ -48,6 +49,8 @@ class TestTeacherInviteView:
 
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["message"] == "Teacher invitation sent successfully."
+        assert response.data["invitation_url"].startswith(settings.FRONTEND_DOMAIN)
+        assert "/complete-teacher-invitation/" in response.data["invitation_url"]
 
         new_user = User.objects.get(email="newteacher@example.com")
         assert new_user.name == "New"
@@ -120,6 +123,7 @@ class TestTeacherInviteView:
         assert response.status_code == status.HTTP_201_CREATED
         assert User.objects.filter(email="superteacher@example.com").exists()
         assert Teacher.objects.filter(user__email="superteacher@example.com").exists()
+        assert response.data["invitation_url"].startswith(settings.FRONTEND_DOMAIN)
         assert mock_send_email.called
 
     @patch("accounts.email.send_email_task.delay")
@@ -160,6 +164,7 @@ class TestTeacherInviteView:
             user__email="branchadminteacher@example.com",
             branch=branch,
         ).exists()
+        assert response.data["invitation_url"].startswith(settings.FRONTEND_DOMAIN)
         assert mock_send_email.called
 
     @patch("accounts.email.send_email_task.delay", side_effect=RuntimeError("boom"))
@@ -238,6 +243,8 @@ class TestTeacherInviteView:
         response = view(request)
 
         assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["invitation_url"].startswith(settings.FRONTEND_DOMAIN)
+        assert "/complete-teacher-invitation/" in response.data["invitation_url"]
         user.refresh_from_db()
         teacher.refresh_from_db()
         assert User.objects.filter(email="existingteacher@example.com").count() == 1

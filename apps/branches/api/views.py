@@ -2,16 +2,16 @@ import secrets
 
 from accounts.email import BranchAdminInvitationEmail
 from accounts.models import User
+from accounts.services import create_invitation_link
 from branches.api.serializers import BranchAdminSerializer
 from branches.api.serializers import BranchSerializer
 from branches.models import Branch
 from branches.models import BranchAdmin
 from django.contrib.auth.tokens import default_token_generator
+from django.db import transaction
 from django.utils import timezone
-from django.utils.encoding import force_bytes
 from django.utils.encoding import force_str
 from django.utils.http import urlsafe_base64_decode
-from django.utils.http import urlsafe_base64_encode
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter
 from drf_spectacular.utils import extend_schema
@@ -117,42 +117,84 @@ class BranchAdminInviteView(APIView):
         role_title = data["role_title"]
         branch = data["branch"]
 
-        random_password = secrets.token_urlsafe(16)
-        user = User.objects.create_user(
-            email=email,
-            password=random_password,
-            name=name,
-            father_name=father_name,
-            grandfather_name=grandfather_name,
-            role=User.Role.BRANCH_ADMIN,
-            is_active=False,
-        )
+        with transaction.atomic():
+            random_password = secrets.token_urlsafe(16)
+            existing_user = data.get("existing_user")
+            if existing_user is None:
+                user = User.objects.create_user(
+                    email=email,
+                    password=random_password,
+                    name=name,
+                    father_name=father_name,
+                    grandfather_name=grandfather_name,
+                    role=User.Role.BRANCH_ADMIN,
+                    is_active=False,
+                )
 
-        BranchAdmin.objects.create(
-            organization=branch.organization,
-            branch=branch,
-            user=user,
-            role_title=role_title,
-            status=BranchAdmin.Status.INACTIVE,
-        )
+                BranchAdmin.objects.create(
+                    organization=branch.organization,
+                    branch=branch,
+                    user=user,
+                    role_title=role_title,
+                    status=BranchAdmin.Status.INACTIVE,
+                )
+            else:
+                user = existing_user
+                user.name = name
+                user.father_name = father_name
+                user.grandfather_name = grandfather_name
+                user.role = User.Role.BRANCH_ADMIN
+                user.is_active = False
+                user.verified_at = None
+                user.set_password(random_password)
+                user.save(
+                    update_fields=[
+                        "name",
+                        "father_name",
+                        "grandfather_name",
+                        "role",
+                        "is_active",
+                        "verified_at",
+                        "password",
+                    ],
+                )
 
-        uid = urlsafe_base64_encode(force_bytes(user.pk))
-        token = default_token_generator.make_token(user)
-        path = f"complete-invitation/{uid}/{token}"
+                branch_admin = user.branch_admin_profiles.get()
+                branch_admin.organization = branch.organization
+                branch_admin.branch = branch
+                branch_admin.role_title = role_title
+                branch_admin.status = BranchAdmin.Status.INACTIVE
+                branch_admin.save(
+                    update_fields=[
+                        "organization",
+                        "branch",
+                        "role_title",
+                        "status",
+                        "updated_at",
+                    ],
+                )
 
-        email_obj = BranchAdminInvitationEmail(
-            request,
-            context={
-                "user": user,
-                "branch_name": branch.name,
-                "invited_by": request.user.name,
-                "url": path,
-            },
-        )
-        email_obj.send([user.email])
+            invitation_link = create_invitation_link(
+                user=user,
+                path_template="complete-invitation/{uid}/{token}",
+            )
+
+            email_obj = BranchAdminInvitationEmail(
+                request,
+                context={
+                    "user": user,
+                    "branch_name": branch.name,
+                    "invited_by": request.user.name,
+                    "url": invitation_link.path,
+                },
+            )
+            email_obj.send([user.email])
 
         return Response(
-            {"message": "Invitation sent successfully."},
+            {
+                "message": "Invitation sent successfully.",
+                "invitation_url": invitation_link.full_url,
+            },
             status=status.HTTP_201_CREATED,
         )
 
