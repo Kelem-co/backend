@@ -156,3 +156,74 @@ class TestAssessmentsAPI:
         assert response.data["results"][0]["teacher_name"] == "Abel"
         assert response.data["results"][0]["section_name"] == section.name
         assert response.data["results"][0]["subject_name"] == subject.name
+
+    def test_teacher_can_fetch_own_assessments_by_filters(  # noqa: PLR0913
+        self,
+        api_client,
+        organization,
+        branch,
+        academic_year,
+        section,
+        subject,
+        teacher,
+    ):
+        api_client.force_authenticate(user=teacher.user)
+
+        matching_assignment = TeacherSubjectAssignment.objects.create(
+            teacher=teacher,
+            organization=organization,
+            subject=subject,
+            section=section,
+            academic_year=academic_year,
+        )
+        matching_assessment = Assessment.objects.create(
+            organization=organization,
+            branch=branch,
+            teacher_assignment=matching_assignment,
+            title="Teacher Visible Quiz",
+            task_type=Assessment.TaskType.QUIZ,
+            total_marks=25,
+            passing_marks=12,
+            due_date=date(2026, 1, 20),
+            status=Assessment.Status.PUBLISHED,
+        )
+
+        other_teacher = Teacher.objects.create(
+            user=UserFactory(role="TEACHER", name="Beth"),
+            organization=organization,
+            branch=branch,
+            employee_id="EMP-1002",
+            specialization="Physics",
+        )
+        other_assignment = TeacherSubjectAssignment.objects.create(
+            teacher=other_teacher,
+            organization=organization,
+            subject=subject,
+            section=section,
+            academic_year=academic_year,
+        )
+        Assessment.objects.create(
+            organization=organization,
+            branch=branch,
+            teacher_assignment=other_assignment,
+            title="Teacher Hidden Quiz",
+            task_type=Assessment.TaskType.QUIZ,
+            total_marks=25,
+            passing_marks=12,
+            due_date=date(2026, 1, 21),
+            status=Assessment.Status.PUBLISHED,
+        )
+
+        response = api_client.get(
+            "/api/assessments/",
+            {
+                "teacher": str(teacher.id),
+                "section": str(section.id),
+                "subject": str(subject.id),
+            },
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["count"] == 1
+        assert response.data["results"][0]["id"] == str(matching_assessment.id)
+        assert response.data["results"][0]["teacher_name"] == "Abel"

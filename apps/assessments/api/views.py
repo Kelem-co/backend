@@ -30,6 +30,13 @@ from .serializers import ParentHomeworkConfirmSerializer
 # ---------------------------------------------------------------------------
 
 
+def scope_assessment_queryset_for_user(queryset, user):
+    access_filter = user_resource_access_filter(user)
+    if getattr(user, "is_authenticated", False):
+        access_filter |= Q(teacher_assignment__teacher__user=user)
+    return queryset.filter(access_filter).distinct()
+
+
 class AssessmentViewSet(viewsets.ModelViewSet):
     """
     CRUD for Assessments (Assignments, Exams, Homework, Quizzes, etc.).
@@ -78,7 +85,7 @@ class AssessmentViewSet(viewsets.ModelViewSet):
         if getattr(self, "swagger_fake_view", False):
             return qs.none()
 
-        qs = scope_queryset_for_user(qs, self.request.user)
+        qs = scope_assessment_queryset_for_user(qs, self.request.user)
         p = self.request.query_params
         if p.get("organization"):
             qs = qs.filter(organization_id=p["organization"])
