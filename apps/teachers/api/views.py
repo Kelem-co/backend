@@ -45,6 +45,7 @@ from .serializers import TeacherInviteSerializer
 from .serializers import TeacherQualificationSerializer
 from .serializers import TeacherSectionSerializer
 from .serializers import TeacherSerializer
+from .serializers import TeacherStatusSerializer
 from .serializers import TeacherSubjectAssignmentReadSerializer
 from .serializers import TeacherSubjectAssignmentSerializer
 
@@ -306,6 +307,23 @@ class TeacherViewSet(viewsets.ModelViewSet):
         )
         serializer = TeacherSectionSerializer(result, many=True)
         return Response({"count": len(result), "sections": serializer.data})
+
+    # ------------------------------------------------------------------
+    # /teachers/<id>/status/
+    # ------------------------------------------------------------------
+    @extend_schema(
+        responses={status.HTTP_200_OK: TeacherStatusSerializer},
+    )
+    @action(detail=True, methods=["get"], url_path="status")
+    def status(self, request, *args, **kwargs):
+        """
+        Return the activation status for a teacher account.
+
+        The active/inactive state is derived from the related User model.
+        """
+        teacher = self.get_object()
+        serializer = TeacherStatusSerializer(teacher)
+        return Response(serializer.data)
 
 
 class TeacherQualificationViewSet(viewsets.ModelViewSet):

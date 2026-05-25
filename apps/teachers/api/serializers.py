@@ -293,6 +293,18 @@ class TeacherSectionSerializer(serializers.Serializer):
 
 
 # ---------------------------------------------------------------------------
+# Teacher status
+# ---------------------------------------------------------------------------
+
+
+class TeacherStatusSerializer(serializers.Serializer):
+    teacher_id = serializers.UUIDField(source="id", read_only=True)
+    user_id = serializers.UUIDField(source="user.id", read_only=True)
+    is_active = serializers.BooleanField(source="user.is_active", read_only=True)
+    verified_at = serializers.DateTimeField(source="user.verified_at", read_only=True)
+
+
+# ---------------------------------------------------------------------------
 # Teacher invitation
 # ---------------------------------------------------------------------------
 
