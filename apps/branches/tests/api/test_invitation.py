@@ -10,6 +10,7 @@ from branches.api.views import BranchAdminInviteView
 from branches.models import BranchAdmin
 from branches.tests.factories import BranchAdminFactory
 from branches.tests.factories import BranchFactory
+from django.conf import settings
 from django.contrib.auth.tokens import default_token_generator
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
@@ -46,6 +47,10 @@ class TestBranchAdminInviteView:
 
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["message"] == "Invitation sent successfully."
+        assert response.data["invitation_url"].startswith(
+            settings.FRONTEND_DOMAIN,
+        )
+        assert "/complete-invitation/" in response.data["invitation_url"]
 
         # Verify user created
         new_user = User.objects.get(email="newadmin@example.com")
@@ -86,6 +91,185 @@ class TestBranchAdminInviteView:
         # The error format is {'errors': [{'code': 'invalid', 'detail': '...', 'field': 'branch'}]} # noqa: E501
         assert "errors" in response.data
         assert response.data["errors"][0]["field"] == "branch"
+
+    @patch("accounts.email.send_email_task.delay")
+    def test_reinvite_updates_existing_inactive_branch_admin(
+        self,
+        mock_send_email,
+        api_rf: APIRequestFactory,
+    ):
+        owner = UserFactory()
+        old_branch = BranchFactory(school__organization__owner=owner)
+        new_branch = BranchFactory(school__organization__owner=owner)
+        user = UserFactory(
+            email="existingadmin@example.com",
+            role=User.Role.BRANCH_ADMIN,
+            is_active=False,
+            name="Old",
+            father_name="Branch",
+            grandfather_name="Admin",
+        )
+        admin = BranchAdminFactory(
+            user=user,
+            organization=old_branch.organization,
+            branch=old_branch,
+            role_title="Old Title",
+            status=BranchAdmin.Status.ACTIVE,
+        )
+
+        view = BranchAdminInviteView.as_view()
+        request = api_rf.post(
+            "/fake-url/",
+            {
+                "email": "existingadmin@example.com",
+                "name": "Updated",
+                "father_name": "Branch",
+                "grandfather_name": "Lead",
+                "role_title": "Branch Manager",
+                "branch": new_branch.id,
+            },
+        )
+        request.user = owner
+
+        response = view(request)
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["invitation_url"].startswith(
+            settings.FRONTEND_DOMAIN,
+        )
+        assert "/complete-invitation/" in response.data["invitation_url"]
+        user.refresh_from_db()
+        admin.refresh_from_db()
+        assert User.objects.filter(email="existingadmin@example.com").count() == 1
+        assert user.name == "Updated"
+        assert user.father_name == "Branch"
+        assert user.grandfather_name == "Lead"
+        assert user.is_active is False
+        assert user.verified_at is None
+        assert admin.organization == new_branch.organization
+        assert admin.branch == new_branch
+        assert admin.role_title == "Branch Manager"
+        assert admin.status == BranchAdmin.Status.INACTIVE
+        assert mock_send_email.called
+
+    def test_invite_rejects_existing_active_branch_admin(
+        self,
+        api_rf: APIRequestFactory,
+    ):
+        owner = UserFactory()
+        branch = BranchFactory(school__organization__owner=owner)
+        user = UserFactory(
+            email="activeadmin@example.com",
+            role=User.Role.BRANCH_ADMIN,
+            is_active=True,
+        )
+        BranchAdminFactory(
+            user=user,
+            organization=branch.organization,
+            branch=branch,
+            status=BranchAdmin.Status.ACTIVE,
+        )
+
+        view = BranchAdminInviteView.as_view()
+        request = api_rf.post(
+            "/fake-url/",
+            {
+                "email": "activeadmin@example.com",
+                "name": "Active",
+                "father_name": "Branch",
+                "grandfather_name": "Admin",
+                "role_title": "Branch Manager",
+                "branch": branch.id,
+            },
+        )
+        request.user = owner
+
+        response = view(request)
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "errors" in response.data
+        assert response.data["errors"][0]["field"] == "email"
+
+    def test_invite_rejects_existing_user_with_wrong_role(
+        self,
+        api_rf: APIRequestFactory,
+    ):
+        owner = UserFactory()
+        branch = BranchFactory(school__organization__owner=owner)
+        UserFactory(
+            email="wrongrole@example.com",
+            role=User.Role.TEACHER,
+            is_active=False,
+        )
+
+        view = BranchAdminInviteView.as_view()
+        request = api_rf.post(
+            "/fake-url/",
+            {
+                "email": "wrongrole@example.com",
+                "name": "Wrong",
+                "father_name": "Role",
+                "grandfather_name": "User",
+                "role_title": "Branch Manager",
+                "branch": branch.id,
+            },
+        )
+        request.user = owner
+
+        response = view(request)
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "errors" in response.data
+        assert response.data["errors"][0]["field"] == "email"
+
+    @patch("accounts.email.send_email_task.delay", side_effect=RuntimeError("boom"))
+    def test_invite_rolls_back_reinvite_when_email_send_fails(
+        self,
+        mock_send_email,
+        api_rf: APIRequestFactory,
+    ):
+        owner = UserFactory()
+        original_branch = BranchFactory(school__organization__owner=owner)
+        target_branch = BranchFactory(school__organization__owner=owner)
+        user = UserFactory(
+            email="rollbackadmin@example.com",
+            role=User.Role.BRANCH_ADMIN,
+            is_active=False,
+            name="Original",
+            father_name="Branch",
+            grandfather_name="Admin",
+        )
+        admin = BranchAdminFactory(
+            user=user,
+            organization=original_branch.organization,
+            branch=original_branch,
+            role_title="Original Title",
+            status=BranchAdmin.Status.ACTIVE,
+        )
+
+        view = BranchAdminInviteView.as_view()
+        request = api_rf.post(
+            "/fake-url/",
+            {
+                "email": "rollbackadmin@example.com",
+                "name": "Updated",
+                "father_name": "Branch",
+                "grandfather_name": "Lead",
+                "role_title": "Updated Title",
+                "branch": target_branch.id,
+            },
+        )
+        request.user = owner
+
+        with pytest.raises(RuntimeError, match="boom"):
+            view(request)
+
+        assert mock_send_email.called
+        user.refresh_from_db()
+        admin.refresh_from_db()
+        assert user.name == "Original"
+        assert admin.branch == original_branch
+        assert admin.role_title == "Original Title"
 
 
 @pytest.mark.django_db

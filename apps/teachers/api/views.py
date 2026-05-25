@@ -2,16 +2,15 @@ import secrets
 
 from accounts.email import TeacherInvitationEmail
 from accounts.models import User
+from accounts.services import create_invitation_link
 from branches.models import Branch
 from django.contrib.auth.tokens import default_token_generator
 from django.db import transaction
 from django.db.models import Prefetch
 from django.db.models import Q
 from django.utils import timezone
-from django.utils.encoding import force_bytes
 from django.utils.encoding import force_str
 from django.utils.http import urlsafe_base64_decode
-from django.utils.http import urlsafe_base64_encode
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter
 from drf_spectacular.utils import extend_schema
@@ -685,9 +684,10 @@ class TeacherInviteView(APIView):
                     ],
                 )
 
-            uid = urlsafe_base64_encode(force_bytes(user.pk))
-            token = default_token_generator.make_token(user)
-            path = f"complete-teacher-invitation/{uid}/{token}"
+            invitation_link = create_invitation_link(
+                user=user,
+                path_template="complete-teacher-invitation/{uid}/{token}",
+            )
 
             email_obj = TeacherInvitationEmail(
                 request,
@@ -695,13 +695,16 @@ class TeacherInviteView(APIView):
                     "user": user,
                     "branch_name": branch.name,
                     "invited_by": request.user.name,
-                    "url": path,
+                    "url": invitation_link.path,
                 },
             )
             email_obj.send([user.email])
 
         return Response(
-            {"message": "Teacher invitation sent successfully."},
+            {
+                "message": "Teacher invitation sent successfully.",
+                "invitation_url": invitation_link.full_url,
+            },
             status=status.HTTP_201_CREATED,
         )
 

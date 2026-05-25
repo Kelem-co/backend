@@ -4,10 +4,12 @@ import hashlib
 import secrets
 from dataclasses import dataclass
 from datetime import timedelta
+from urllib.parse import urlsplit
 
 from accounts.models import ApprovalLoginToken
 from accounts.models import User
 from django.conf import settings
+from django.contrib.auth.tokens import default_token_generator
 from django.db import transaction
 from django.utils import timezone
 from django.utils.crypto import constant_time_compare
@@ -28,13 +30,39 @@ class ApprovalMagicLink:
     raw_token: str
 
 
+@dataclass(frozen=True)
+class InvitationLink:
+    path: str
+    full_url: str
+
+
 def _hash_token_secret(secret: str) -> str:
     return hashlib.sha256(secret.encode("utf-8")).hexdigest()
+
+
+def build_frontend_url(path: str) -> str:
+    domain = str(settings.FRONTEND_DOMAIN).rstrip("/")
+    parsed_domain = urlsplit(domain)
+    if parsed_domain.scheme and parsed_domain.netloc:
+        base_url = domain
+    else:
+        base_url = f"{settings.FRONTEND_PROTOCOL}://{domain}"
+    return f"{base_url}/{path.lstrip('/')}"
 
 
 def build_frontend_approval_magic_link(*, user: User, raw_token: str) -> str:
     uid = urlsafe_base64_encode(force_bytes(user.pk))
     return APPROVAL_MAGIC_LINK_PATH.format(uid=uid, token=raw_token)
+
+
+def create_invitation_link(*, user: User, path_template: str) -> InvitationLink:
+    uid = urlsafe_base64_encode(force_bytes(user.pk))
+    token = default_token_generator.make_token(user)
+    path = path_template.format(uid=uid, token=token)
+    return InvitationLink(
+        path=path,
+        full_url=build_frontend_url(path),
+    )
 
 
 def create_approval_magic_link(*, user: User) -> ApprovalMagicLink:
