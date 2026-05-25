@@ -37,6 +37,7 @@ class TestTeacherInviteView:
                 "name": "New",
                 "father_name": "Teacher",
                 "grandfather_name": "Test",
+                "phone_number": "+251911111112",
                 "specialization": "Mathematics",
                 "branch": branch.id,
             },
@@ -50,6 +51,9 @@ class TestTeacherInviteView:
 
         new_user = User.objects.get(email="newteacher@example.com")
         assert new_user.name == "New"
+        assert new_user.father_name == "Teacher"
+        assert new_user.grandfather_name == "Test"
+        assert new_user.phone_number == "+251911111112"
         assert new_user.role == User.Role.TEACHER
         assert new_user.is_active is False
 
@@ -73,6 +77,7 @@ class TestTeacherInviteView:
                 "name": "New",
                 "father_name": "Teacher",
                 "grandfather_name": "Test",
+                "phone_number": "+251911111113",
                 "specialization": "Mathematics",
                 "branch": branch.id,
             },
@@ -103,6 +108,7 @@ class TestTeacherInviteView:
                 "name": "Super",
                 "father_name": "Teacher",
                 "grandfather_name": "Test",
+                "phone_number": "+251911111114",
                 "specialization": "Science",
                 "branch": branch.id,
             },
@@ -139,6 +145,7 @@ class TestTeacherInviteView:
                 "name": "Branch",
                 "father_name": "Admin",
                 "grandfather_name": "Teacher",
+                "phone_number": "+251911111115",
                 "specialization": "Amharic",
                 "branch": branch.id,
             },
@@ -172,6 +179,7 @@ class TestTeacherInviteView:
                 "name": "Rollback",
                 "father_name": "Teacher",
                 "grandfather_name": "Test",
+                "phone_number": "+251911111116",
                 "specialization": "Mathematics",
                 "branch": branch.id,
             },
@@ -186,6 +194,62 @@ class TestTeacherInviteView:
         assert not Teacher.objects.filter(
             user__email="rollbackteacher@example.com",
         ).exists()
+
+    @patch("accounts.email.send_email_task.delay")
+    def test_reinvite_updates_existing_inactive_teacher(
+        self,
+        mock_send_email,
+        api_rf: APIRequestFactory,
+    ):
+        owner = UserFactory()
+        old_branch = BranchFactory(school__organization__owner=owner)
+        new_branch = BranchFactory(school__organization__owner=owner)
+        user = UserFactory(
+            email="existingteacher@example.com",
+            role=User.Role.TEACHER,
+            is_active=False,
+            name="Old",
+            father_name="Value",
+            grandfather_name="Here",
+            phone_number="+251911111117",
+        )
+        teacher = Teacher.objects.create(
+            user=user,
+            organization=old_branch.organization,
+            branch=old_branch,
+            specialization="History",
+        )
+
+        view = TeacherInviteView.as_view()
+        request = api_rf.post(
+            "/fake-url/",
+            {
+                "email": "existingteacher@example.com",
+                "name": "Updated",
+                "father_name": "Teacher",
+                "grandfather_name": "Profile",
+                "phone_number": "+251911111118",
+                "specialization": "Physics",
+                "branch": new_branch.id,
+            },
+        )
+        request.user = owner
+
+        response = view(request)
+
+        assert response.status_code == status.HTTP_201_CREATED
+        user.refresh_from_db()
+        teacher.refresh_from_db()
+        assert User.objects.filter(email="existingteacher@example.com").count() == 1
+        assert user.name == "Updated"
+        assert user.father_name == "Teacher"
+        assert user.grandfather_name == "Profile"
+        assert user.phone_number == "+251911111118"
+        assert user.is_active is False
+        assert teacher.branch == new_branch
+        assert teacher.organization == new_branch.organization
+        assert teacher.specialization == "Physics"
+        assert mock_send_email.called
 
 
 @pytest.mark.django_db

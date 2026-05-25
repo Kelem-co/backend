@@ -39,7 +39,13 @@ class TestTeacherDetailActions:
     @pytest.fixture
     def teacher(self, organization, branch):
         return Teacher.objects.create(
-            user=UserFactory(role="TEACHER"),
+            user=UserFactory(
+                role="TEACHER",
+                name="Abel",
+                father_name="Bekele",
+                grandfather_name="Chala",
+                phone_number="+251911111111",
+            ),
             organization=organization,
             branch=branch,
             employee_id="EMP-1001",
@@ -249,6 +255,10 @@ class TestTeacherDetailActions:
         assert response.data["count"] == 1
         assert response.data["results"][0]["id"] == str(teacher.id)
         assert str(response.data["results"][0]["user"]) == str(teacher.user_id)
+        assert response.data["results"][0]["user_name"] == "Abel"
+        assert response.data["results"][0]["user_father_name"] == "Bekele"
+        assert response.data["results"][0]["user_grandfather_name"] == "Chala"
+        assert response.data["results"][0]["user_phone_number"] == "+251911111111"
         assert response.data["results"][0]["id"] != str(other_teacher.id)
 
     def test_teacher_can_list_own_profile_by_user_id(

@@ -38,6 +38,9 @@ class AssessmentViewSet(viewsets.ModelViewSet):
       ?organization=<id>
       ?branch=<id>
       ?teacher_assignment=<id>
+      ?teacher=<id>
+      ?section=<id>
+      ?subject=<id>
       ?task_type=ASSIGNMENT|EXAM|QUIZ|HOMEWORK|PROJECT|LAB
       ?status=DRAFT|PUBLISHED|CLOSED
 
@@ -83,6 +86,12 @@ class AssessmentViewSet(viewsets.ModelViewSet):
             qs = qs.filter(branch_id=p["branch"])
         if p.get("teacher_assignment"):
             qs = qs.filter(teacher_assignment_id=p["teacher_assignment"])
+        if p.get("teacher"):
+            qs = qs.filter(teacher_assignment__teacher_id=p["teacher"])
+        if p.get("section"):
+            qs = qs.filter(teacher_assignment__section_id=p["section"])
+        if p.get("subject"):
+            qs = qs.filter(teacher_assignment__subject_id=p["subject"])
         if p.get("task_type"):
             qs = qs.filter(task_type=p["task_type"].upper())
         if p.get("status"):
