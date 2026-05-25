@@ -6,14 +6,13 @@ from academics.tests.factories import GradeFactory
 from academics.tests.factories import SectionFactory
 from academics.tests.factories import SubjectFactory
 from accounts.tests.factories import UserFactory
+from assessments.models import Assessment
 from branches.tests.factories import BranchFactory
 from organizations.tests.factories import OrganizationFactory
 from rest_framework import status
 from rest_framework.test import APIClient
 from teachers.models import Teacher
 from teachers.models import TeacherSubjectAssignment
-
-from assessments.models import Assessment
 
 
 @pytest.mark.django_db
