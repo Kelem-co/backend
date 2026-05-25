@@ -99,3 +99,7 @@ class BranchAdminInvitationEmail(AsyncMultipartDjoserEmail):
 
 class TeacherInvitationEmail(AsyncMultipartDjoserEmail):
     template_stem = "teacher_invitation"
+
+
+class OrganizationApprovalMagicLinkEmail(AsyncMultipartDjoserEmail):
+    template_stem = "organization_approval_magic_link"

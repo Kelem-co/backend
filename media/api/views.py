@@ -96,11 +96,13 @@ class MediaUploadViewSet(ApiEnvelopeMixin, GenericViewSet):
         window_seconds = settings_dict["FINGERPRINT_WINDOW"]
 
         now = timezone.now()
-        window_hour = now.replace(
-            minute=0,
-            second=0,
-            microsecond=0,
-        ) - timezone.timedelta(seconds=now.second % window_seconds)
+        window_start_timestamp = (
+            int(now.timestamp()) // window_seconds
+        ) * window_seconds
+        window_hour = timezone.datetime.fromtimestamp(
+            window_start_timestamp,
+            tz=now.tzinfo,
+        )
 
         fingerprint_input = (
             f"{user_id}{file_name}{content_type}{window_hour.isoformat()}"

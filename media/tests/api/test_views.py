@@ -71,28 +71,32 @@ class TestUploadInitiation:
         authenticated_user,
     ):
         with mock.patch(
-            "media.api.views.S3StorageClient.create_multipart_upload",
-        ) as mock_create:
-            mock_create.return_value = "upload-1"
+            "media.api.views.MediaUploadViewSet._generate_fingerprint",
+            return_value="same-fingerprint",
+        ):
+            with mock.patch(
+                "media.api.views.S3StorageClient.create_multipart_upload",
+            ) as mock_create:
+                mock_create.return_value = "upload-1"
 
-            response1 = authenticated_client.post(
-                "/api/media/upload",
-                {"file_name": "test.pdf", "content_type": "application/pdf"},
-                format="json",
-            )
+                response1 = authenticated_client.post(
+                    "/api/media/upload",
+                    {"file_name": "test.pdf", "content_type": "application/pdf"},
+                    format="json",
+                )
 
-        first_id = response1.json()["data"]["id"]
+            first_id = response1.json()["data"]["id"]
 
-        with mock.patch(
-            "media.api.views.S3StorageClient.create_multipart_upload",
-        ) as mock_create:
-            mock_create.return_value = "upload-2"
+            with mock.patch(
+                "media.api.views.S3StorageClient.create_multipart_upload",
+            ) as mock_create:
+                mock_create.return_value = "upload-2"
 
-            response2 = authenticated_client.post(
-                "/api/media/upload",
-                {"file_name": "test.pdf", "content_type": "application/pdf"},
-                format="json",
-            )
+                response2 = authenticated_client.post(
+                    "/api/media/upload",
+                    {"file_name": "test.pdf", "content_type": "application/pdf"},
+                    format="json",
+                )
 
         assert response2.status_code == status.HTTP_200_OK
         second_id = response2.json()["data"]["id"]

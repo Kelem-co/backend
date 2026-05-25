@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import typing
 
+from accounts.auth import ORGANIZATION_LOGIN_BLOCK_MESSAGE
+from accounts.auth import OrganizationLoginState
+from accounts.auth import get_organization_login_state
 from allauth.account.adapter import DefaultAccountAdapter
 from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
 from django.conf import settings
@@ -13,8 +16,21 @@ if typing.TYPE_CHECKING:
 
 
 class AccountAdapter(DefaultAccountAdapter):
+    error_messages = {
+        **DefaultAccountAdapter.error_messages,
+        "organization_not_verified": ORGANIZATION_LOGIN_BLOCK_MESSAGE,
+    }
+
     def is_open_for_signup(self, request: HttpRequest) -> bool:
         return getattr(settings, "ACCOUNT_ALLOW_REGISTRATION", True)
+
+    def authenticate(self, request: HttpRequest, **credentials):
+        user = super().authenticate(request, **credentials)
+        login_state = get_organization_login_state(user)
+        if login_state == OrganizationLoginState.PENDING_VERIFICATION:
+            error_code = "organization_not_verified"
+            raise self.validation_error(error_code)
+        return user
 
 
 class SocialAccountAdapter(DefaultSocialAccountAdapter):

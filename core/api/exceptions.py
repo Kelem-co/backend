@@ -88,15 +88,13 @@ def error_response(
     status_code: int,
     field: str | None = None,
 ) -> Response:
-    return Response(
-        {
-            "errors": [
-                {
-                    "code": code,
-                    "detail": detail,
-                    "field": field,
-                },
-            ],
-        },
-        status=status_code,
-    )
+    payload = {
+        "errors": [
+            {
+                "code": code,
+                "detail": detail,
+                "field": field,
+            },
+        ],
+    }
+    return Response(payload, status=status_code)
