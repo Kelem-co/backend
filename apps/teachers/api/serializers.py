@@ -46,7 +46,16 @@ class TeacherSerializer(serializers.ModelSerializer):
 
     qualifications = TeacherQualificationSerializer(many=True, read_only=True)
     user_name = serializers.CharField(source="user.name", read_only=True)
+    user_father_name = serializers.CharField(source="user.father_name", read_only=True)
+    user_grandfather_name = serializers.CharField(
+        source="user.grandfather_name",
+        read_only=True,
+    )
     user_email = serializers.EmailField(source="user.email", read_only=True)
+    user_phone_number = serializers.CharField(
+        source="user.phone_number",
+        read_only=True,
+    )
 
     class Meta:
         model = Teacher
@@ -54,7 +63,10 @@ class TeacherSerializer(serializers.ModelSerializer):
             "id",
             "user",
             "user_name",
+            "user_father_name",
+            "user_grandfather_name",
             "user_email",
+            "user_phone_number",
             "organization",
             "branch",
             "employee_id",
@@ -290,6 +302,18 @@ class TeacherSectionSerializer(serializers.Serializer):
     academic_year_id = serializers.UUIDField()
     academic_year_name = serializers.CharField()
     subjects = serializers.ListField(child=serializers.DictField())
+
+
+# ---------------------------------------------------------------------------
+# Teacher status
+# ---------------------------------------------------------------------------
+
+
+class TeacherStatusSerializer(serializers.Serializer):
+    teacher_id = serializers.UUIDField(source="id", read_only=True)
+    user_id = serializers.UUIDField(source="user.id", read_only=True)
+    is_active = serializers.BooleanField(source="user.is_active", read_only=True)
+    verified_at = serializers.DateTimeField(source="user.verified_at", read_only=True)
 
 
 # ---------------------------------------------------------------------------

@@ -6,8 +6,10 @@ from academics.tests.factories import GradeFactory
 from academics.tests.factories import SectionFactory
 from academics.tests.factories import SubjectFactory
 from accounts.tests.factories import UserFactory
+from branches.tests.factories import BranchAdminFactory
 from branches.tests.factories import BranchFactory
 from django.urls import reverse
+from django.utils import timezone
 from organizations.tests.factories import OrganizationFactory
 from rest_framework import status
 from rest_framework.test import APIClient
@@ -137,6 +139,93 @@ class TestTeacherDetailActions:
         assert response.data[0]["id"] == str(qualification.id)
         assert response.data[0]["degree_name"] == "BSc"
 
+    def test_teacher_detail_includes_related_user_name_fields(
+        self,
+        api_client,
+        owner,
+        teacher,
+    ):
+        teacher.user.name = "Abel"
+        teacher.user.father_name = "Bekele"
+        teacher.user.grandfather_name = "Chala"
+        teacher.user.phone_number = "+251911111111"
+        teacher.user.save(
+            update_fields=[
+                "name",
+                "father_name",
+                "grandfather_name",
+                "phone_number",
+            ],
+        )
+        api_client.force_authenticate(user=owner)
+
+        response = api_client.get(f"/api/teachers/{teacher.id}/")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["id"] == str(teacher.id)
+        assert response.data["user_name"] == "Abel"
+        assert response.data["user_father_name"] == "Bekele"
+        assert response.data["user_grandfather_name"] == "Chala"
+        assert response.data["user_phone_number"] == "+251911111111"
+
+    def test_teacher_status_detail_action_returns_user_activation_state(
+        self,
+        api_client,
+        owner,
+        teacher,
+    ):
+        teacher.user.is_active = False
+        teacher.user.verified_at = timezone.now()
+        teacher.user.save(update_fields=["is_active", "verified_at"])
+        api_client.force_authenticate(user=owner)
+
+        response = api_client.get(f"/api/teachers/{teacher.id}/status/")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["teacher_id"] == str(teacher.id)
+        assert response.data["user_id"] == str(teacher.user_id)
+        assert response.data["is_active"] is False
+        assert response.data["verified_at"] is not None
+
+    def test_branch_admin_can_access_teacher_status_for_own_branch(
+        self,
+        api_client,
+        branch,
+        teacher,
+    ):
+        branch_admin_user = UserFactory(role="BRANCH_ADMIN")
+        BranchAdminFactory(
+            user=branch_admin_user,
+            branch=branch,
+            organization=branch.organization,
+        )
+        api_client.force_authenticate(user=branch_admin_user)
+
+        response = api_client.get(f"/api/teachers/{teacher.id}/status/")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["teacher_id"] == str(teacher.id)
+        assert response.data["is_active"] is True
+
+    def test_branch_admin_cannot_access_teacher_status_outside_own_branch(
+        self,
+        api_client,
+        organization,
+        teacher,
+    ):
+        branch_admin_user = UserFactory(role="BRANCH_ADMIN")
+        other_branch = BranchFactory(school__organization=organization)
+        BranchAdminFactory(
+            user=branch_admin_user,
+            branch=other_branch,
+            organization=organization,
+        )
+        api_client.force_authenticate(user=branch_admin_user)
+
+        response = api_client.get(f"/api/teachers/{teacher.id}/status/")
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
     def test_teacher_list_can_filter_by_user_id(
         self,
         api_client,
@@ -198,6 +287,21 @@ def test_teacher_sections_endpoint_is_present_in_openapi_schema(admin_client):
 
     assert "academic_year" in parameter_names
     assert response_schema.endswith("/TeacherSectionsResponse")
+
+
+@pytest.mark.django_db
+def test_teacher_status_endpoint_is_present_in_openapi_schema(admin_client):
+    response = admin_client.get(f"{reverse('api-schema')}?format=json")
+
+    assert response.status_code == status.HTTP_200_OK
+
+    schema = response.json()
+    operation = schema["paths"]["/api/teachers/{id}/status/"]["get"]
+    response_schema = operation["responses"]["200"]["content"]["application/json"][
+        "schema"
+    ]["$ref"]
+
+    assert response_schema.endswith("/TeacherStatus")
 
 
 @pytest.mark.django_db
