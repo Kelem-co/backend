@@ -328,10 +328,12 @@ class TeacherInviteSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=255)
     father_name = serializers.CharField(max_length=255)
     grandfather_name = serializers.CharField(max_length=255)
+    phone_number = serializers.CharField(max_length=20)
     specialization = serializers.CharField(max_length=255, required=False, default="")
     branch = serializers.PrimaryKeyRelatedField(read_only=True)
 
     EMAIL_VALIDATION_ERROR_MESSAGE = "A user with this email already exists."
+    PHONE_VALIDATION_ERROR_MESSAGE = "A user with this phone number already exists."
 
     def get_fields(self):
         from branches.models import Branch  # noqa: PLC0415
@@ -342,16 +344,29 @@ class TeacherInviteSerializer(serializers.Serializer):
         )
         return fields
 
-    def validate_email(self, value: str) -> str:
-        from accounts.models import User  # noqa: PLC0415
-
-        if User.objects.filter(email=value).exists():
-            raise serializers.ValidationError(self.EMAIL_VALIDATION_ERROR_MESSAGE)
-        return value
-
     def validate(self, attrs: dict) -> dict:
+        from accounts.models import User  # noqa: PLC0415
+        from teachers.models import Teacher  # noqa: PLC0415
+
         request = self.context.get("request")
         branch = attrs.get("branch")
+        existing_user = User.objects.filter(email=attrs["email"]).first()
+
+        if existing_user is not None:
+            if existing_user.role != User.Role.TEACHER or existing_user.is_active:
+                raise ValidationError({"email": self.EMAIL_VALIDATION_ERROR_MESSAGE})
+            if not Teacher.objects.filter(user=existing_user).exists():
+                raise ValidationError({"email": self.EMAIL_VALIDATION_ERROR_MESSAGE})
+            attrs["existing_user"] = existing_user
+
+        phone_number_conflict = User.objects.filter(phone_number=attrs["phone_number"])
+        if existing_user is not None:
+            phone_number_conflict = phone_number_conflict.exclude(pk=existing_user.pk)
+        if phone_number_conflict.exists():
+            raise ValidationError(
+                {"phone_number": self.PHONE_VALIDATION_ERROR_MESSAGE},
+            )
+
         if request and branch and not user_can_access_branch(request.user, branch):
             raise ValidationError(
                 {"branch": "You can only manage branches in your organizations."},

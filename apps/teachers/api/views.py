@@ -631,22 +631,59 @@ class TeacherInviteView(APIView):
             # Keep the invite flow atomic so failed profile/email steps do not
             # leave behind an unusable inactive user record.
             random_password = secrets.token_urlsafe(16)
-            user = User.objects.create_user(
-                email=data["email"],
-                password=random_password,
-                name=data["name"],
-                father_name=data["father_name"],
-                grandfather_name=data["grandfather_name"],
-                role=User.Role.TEACHER,
-                is_active=False,
-            )
+            existing_user = data.get("existing_user")
+            if existing_user is None:
+                user = User.objects.create_user(
+                    email=data["email"],
+                    password=random_password,
+                    name=data["name"],
+                    father_name=data["father_name"],
+                    grandfather_name=data["grandfather_name"],
+                    phone_number=data["phone_number"],
+                    role=User.Role.TEACHER,
+                    is_active=False,
+                )
 
-            Teacher.objects.create(
-                user=user,
-                organization=branch.organization,
-                branch=branch,
-                specialization=data.get("specialization", ""),
-            )
+                Teacher.objects.create(
+                    user=user,
+                    organization=branch.organization,
+                    branch=branch,
+                    specialization=data.get("specialization", ""),
+                )
+            else:
+                user = existing_user
+                user.name = data["name"]
+                user.father_name = data["father_name"]
+                user.grandfather_name = data["grandfather_name"]
+                user.phone_number = data["phone_number"]
+                user.role = User.Role.TEACHER
+                user.is_active = False
+                user.verified_at = None
+                user.set_password(random_password)
+                user.save(
+                    update_fields=[
+                        "name",
+                        "father_name",
+                        "grandfather_name",
+                        "phone_number",
+                        "role",
+                        "is_active",
+                        "verified_at",
+                        "password",
+                    ],
+                )
+
+                teacher = user.teacher_profile
+                teacher.organization = branch.organization
+                teacher.branch = branch
+                teacher.specialization = data.get("specialization", "")
+                teacher.save(
+                    update_fields=[
+                        "organization",
+                        "branch",
+                        "specialization",
+                    ],
+                )
 
             uid = urlsafe_base64_encode(force_bytes(user.pk))
             token = default_token_generator.make_token(user)
