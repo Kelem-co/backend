@@ -102,3 +102,22 @@ class User(UUIDModel, TimeStampedModel, AbstractUser):
             return self.parent_profile
         except Parent.DoesNotExist:
             return None
+
+
+class ApprovalLoginToken(UUIDModel, TimeStampedModel):
+    user = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.CASCADE,
+        related_name="approval_login_tokens",
+        verbose_name=_("User"),
+    )
+    token_hash = models.CharField(_("Token Hash"), max_length=64)
+    expires_at = models.DateTimeField(_("Expires At"))
+    used_at = models.DateTimeField(_("Used At"), blank=True, null=True)
+
+    class Meta:
+        verbose_name = _("Approval Login Token")
+        verbose_name_plural = _("Approval Login Tokens")
+
+    def __str__(self) -> str:
+        return f"Approval login token for {self.user_id}"

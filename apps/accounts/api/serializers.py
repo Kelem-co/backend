@@ -51,6 +51,7 @@ class UserUpdateSerializer(serializers.ModelSerializer[User]):
             "email",
             "phone_number",
             "address",
+            "role",
             "password",
         ]
 

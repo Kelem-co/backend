@@ -3,7 +3,8 @@ from __future__ import annotations
 import typing
 
 from accounts.auth import ORGANIZATION_LOGIN_BLOCK_MESSAGE
-from accounts.auth import is_organization_login_allowed
+from accounts.auth import OrganizationLoginState
+from accounts.auth import get_organization_login_state
 from allauth.account.adapter import DefaultAccountAdapter
 from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
 from django.conf import settings
@@ -25,7 +26,8 @@ class AccountAdapter(DefaultAccountAdapter):
 
     def authenticate(self, request: HttpRequest, **credentials):
         user = super().authenticate(request, **credentials)
-        if user and not is_organization_login_allowed(user):
+        login_state = get_organization_login_state(user)
+        if login_state == OrganizationLoginState.PENDING_VERIFICATION:
             error_code = "organization_not_verified"
             raise self.validation_error(error_code)
         return user

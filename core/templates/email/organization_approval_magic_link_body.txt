@@ -1,0 +1,13 @@
+Hi {{ user.name }},
+
+Your organization {{ organization_name }} has been approved.
+
+Use the secure link below to sign in to your account:
+{{ full_url }}
+
+This link expires in 24 hours and can only be used once.
+
+If you did not expect this email, you can ignore it.
+
+Thanks,
+The {{ site_name }} team

@@ -24,3 +24,19 @@ def test_user_list():
 def test_user_me():
     assert reverse("api:user-me") == "/api/users/me/"
     assert resolve("/api/users/me/").view_name == "api:user-me"
+
+
+def test_jwt_create():
+    assert reverse("jwt-create") == "/auth/jwt/create/"
+    assert resolve("/auth/jwt/create/").view_name == "jwt-create"
+
+
+def test_organization_approval_exchange():
+    assert (
+        reverse("organization-approval-exchange")
+        == "/auth/organization-approval/exchange/"
+    )
+    assert (
+        resolve("/auth/organization-approval/exchange/").view_name
+        == "organization-approval-exchange"
+    )

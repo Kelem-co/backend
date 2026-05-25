@@ -260,7 +260,6 @@ FRONTEND_PROTOCOL = env(
     "FRONTEND_PROTOCOL",
     default="http" if DEBUG else "https",
 )
-
 # ETHIOPIA ETRADE VERIFICATION
 # ------------------------------------------------------------------------------
 ETRADE_API_BASE_URL = env(
@@ -403,9 +402,6 @@ REST_FRAMEWORK = {
 
 SIMPLE_JWT = {
     "AUTH_HEADER_TYPES": ("Bearer", "JWT"),
-    "TOKEN_OBTAIN_SERIALIZER": (
-        "accounts.jwt_serializers.OrganizationAwareTokenObtainPairSerializer"
-    ),
     "USER_AUTHENTICATION_RULE": "accounts.auth.user_authentication_rule",
 }
 
