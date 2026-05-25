@@ -139,6 +139,35 @@ class TestTeacherDetailActions:
         assert response.data[0]["id"] == str(qualification.id)
         assert response.data[0]["degree_name"] == "BSc"
 
+    def test_teacher_detail_includes_related_user_name_fields(
+        self,
+        api_client,
+        owner,
+        teacher,
+    ):
+        teacher.user.name = "Abel"
+        teacher.user.father_name = "Bekele"
+        teacher.user.grandfather_name = "Chala"
+        teacher.user.phone_number = "+251911111111"
+        teacher.user.save(
+            update_fields=[
+                "name",
+                "father_name",
+                "grandfather_name",
+                "phone_number",
+            ],
+        )
+        api_client.force_authenticate(user=owner)
+
+        response = api_client.get(f"/api/teachers/{teacher.id}/")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["id"] == str(teacher.id)
+        assert response.data["user_name"] == "Abel"
+        assert response.data["user_father_name"] == "Bekele"
+        assert response.data["user_grandfather_name"] == "Chala"
+        assert response.data["user_phone_number"] == "+251911111111"
+
     def test_teacher_status_detail_action_returns_user_activation_state(
         self,
         api_client,
