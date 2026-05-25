@@ -40,3 +40,13 @@ def test_organization_approval_exchange():
         resolve("/auth/organization-approval/exchange/").view_name
         == "organization-approval-exchange"
     )
+
+
+def test_parent_otp_request():
+    assert reverse("parent-otp-request") == "/auth/otp/request/"
+    assert resolve("/auth/otp/request/").view_name == "parent-otp-request"
+
+
+def test_parent_otp_verify():
+    assert reverse("parent-otp-verify") == "/auth/otp/verify/"
+    assert resolve("/auth/otp/verify/").view_name == "parent-otp-verify"

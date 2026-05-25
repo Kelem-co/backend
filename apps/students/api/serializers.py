@@ -1,10 +1,14 @@
 from accounts.api.serializers import UserSerializer
+from accounts.models import User
+from accounts.services import normalize_phone_number
+from branches.models import Branch
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 from students.models import Parent
 from students.models import ParentStudentLink
 from students.models import Student
 
+from core.api.access import user_can_access_branch
 from media.api.serializers import MediaFileReferenceField
 
 # Base field list derived from the Student model — kept explicit so
@@ -238,6 +242,102 @@ class ParentReadSerializer(ParentSerializer):
             }
             for link in obj.student_links.select_related("student")
         ]
+
+
+class ParentInviteSerializer(serializers.Serializer):
+    name = serializers.CharField(max_length=255)
+    father_name = serializers.CharField(max_length=255)
+    grandfather_name = serializers.CharField(max_length=255)
+    phone_number = serializers.CharField(max_length=20)
+    branch = serializers.PrimaryKeyRelatedField(queryset=Branch.objects.all())
+    secondary_phone_number = serializers.CharField(
+        max_length=20,
+        required=False,
+        default="",
+        allow_blank=True,
+    )
+    occupation = serializers.CharField(
+        max_length=255,
+        required=False,
+        default="",
+        allow_blank=True,
+    )
+    work_address = serializers.CharField(
+        max_length=255,
+        required=False,
+        default="",
+        allow_blank=True,
+    )
+    relationship_notes = serializers.CharField(
+        required=False,
+        default="",
+        allow_blank=True,
+    )
+    emergency_contact_name = serializers.CharField(
+        max_length=255,
+        required=False,
+        default="",
+        allow_blank=True,
+    )
+    emergency_contact_phone = serializers.CharField(
+        max_length=50,
+        required=False,
+        default="",
+        allow_blank=True,
+    )
+
+    PHONE_VALIDATION_ERROR_MESSAGE = "A parent with this phone number already exists."
+
+    def validate(self, attrs):
+        request = self.context.get("request")
+        branch = attrs["branch"]
+
+        try:
+            attrs["phone_number"] = normalize_phone_number(attrs["phone_number"])
+        except ValueError as err:
+            raise ValidationError({"phone_number": str(err)}) from err
+
+        secondary_phone = attrs.get("secondary_phone_number", "")
+        if secondary_phone:
+            try:
+                attrs["secondary_phone_number"] = normalize_phone_number(
+                    secondary_phone,
+                )
+            except ValueError as err:
+                raise ValidationError({"secondary_phone_number": str(err)}) from err
+
+        emergency_phone = attrs.get("emergency_contact_phone", "")
+        if emergency_phone:
+            try:
+                attrs["emergency_contact_phone"] = normalize_phone_number(
+                    emergency_phone,
+                )
+            except ValueError as err:
+                raise ValidationError({"emergency_contact_phone": str(err)}) from err
+
+        existing_user = User.objects.filter(phone_number=attrs["phone_number"]).first()
+        if existing_user is not None:
+            if existing_user.role != User.Role.PARENT or existing_user.is_active:
+                raise ValidationError(
+                    {"phone_number": self.PHONE_VALIDATION_ERROR_MESSAGE},
+                )
+            if not Parent.objects.filter(user=existing_user).exists():
+                raise ValidationError(
+                    {"phone_number": self.PHONE_VALIDATION_ERROR_MESSAGE},
+                )
+            attrs["existing_user"] = existing_user
+
+        if request and not user_can_access_branch(request.user, branch):
+            raise ValidationError(
+                {"branch": "You can only manage branches in your organizations."},
+            )
+
+        return attrs
+
+
+class ParentCompleteInvitationSerializer(serializers.Serializer):
+    uid = serializers.CharField()
+    token = serializers.CharField()
 
 
 # ---------------------------------------------------------------------------

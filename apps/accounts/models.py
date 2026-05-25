@@ -121,3 +121,28 @@ class ApprovalLoginToken(UUIDModel, TimeStampedModel):
 
     def __str__(self) -> str:
         return f"Approval login token for {self.user_id}"
+
+
+class ParentLoginOTP(UUIDModel, TimeStampedModel):
+    user = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.CASCADE,
+        related_name="parent_login_otps",
+        verbose_name=_("User"),
+    )
+    phone_number = models.CharField(_("Phone Number"), max_length=20)
+    code_hash = models.CharField(_("Code Hash"), max_length=64)
+    expires_at = models.DateTimeField(_("Expires At"))
+    used_at = models.DateTimeField(_("Used At"), blank=True, null=True)
+    failed_attempts = models.PositiveSmallIntegerField(
+        _("Failed Attempts"),
+        default=0,
+    )
+
+    class Meta:
+        verbose_name = _("Parent Login OTP")
+        verbose_name_plural = _("Parent Login OTPs")
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"Parent login OTP for {self.user_id}"
