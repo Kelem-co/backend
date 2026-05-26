@@ -69,18 +69,12 @@ class StudentReadSerializer(StudentSerializer):
     """
 
     # Section
-    section_name = serializers.CharField(source="current_section.name", read_only=True)
+    section_name = serializers.SerializerMethodField()
 
     # Grade (via section)
-    grade_id = serializers.UUIDField(source="current_section.grade.id", read_only=True)
-    grade_name = serializers.CharField(
-        source="current_section.grade.name",
-        read_only=True,
-    )
-    grade_level = serializers.IntegerField(
-        source="current_section.grade.level",
-        read_only=True,
-    )
+    grade_id = serializers.SerializerMethodField()
+    grade_name = serializers.SerializerMethodField()
+    grade_level = serializers.SerializerMethodField()
 
     # Academic year attached to the section (nullable on Section)
     academic_year_id = serializers.SerializerMethodField()
@@ -108,12 +102,40 @@ class StudentReadSerializer(StudentSerializer):
             "organization_name",
         ]
 
+    def get_section_name(self, obj) -> str | None:
+        section = obj.current_section
+        return section.name if section else None
+
+    def get_grade_id(self, obj) -> str | None:
+        section = obj.current_section
+        if section is None:
+            return None
+        return str(section.grade_id)
+
+    def get_grade_name(self, obj) -> str | None:
+        section = obj.current_section
+        if section is None:
+            return None
+        return section.grade.name
+
+    def get_grade_level(self, obj) -> int | None:
+        section = obj.current_section
+        if section is None:
+            return None
+        return section.grade.level
+
     def get_academic_year_id(self, obj) -> str | None:
-        yr = obj.current_section.academic_year
+        section = obj.current_section
+        if section is None:
+            return None
+        yr = section.academic_year
         return str(yr.id) if yr else None
 
     def get_academic_year_name(self, obj) -> str | None:
-        yr = obj.current_section.academic_year
+        section = obj.current_section
+        if section is None:
+            return None
+        yr = section.academic_year
         return yr.name if yr else None
 
 

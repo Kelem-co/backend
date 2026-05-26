@@ -102,8 +102,11 @@ class TestStudentAndParentBulkImport:
         assert parent_user.father_name == "FParent One"
         assert parent_user.grandfather_name == "GParent One"
         assert parent_user.phone_number == "+251911111111"
+        assert parent_user.is_active is False
+        assert parent_user.verified_at is None
 
         parent_profile = Parent.objects.get(user=parent_user)
+        assert parent_profile.is_active is False
         assert parent_profile.secondary_phone_number == ""
         assert parent_profile.occupation == "Merchant"
         assert list(parent_profile.organizations.values_list("id", flat=True)) == [
@@ -112,6 +115,62 @@ class TestStudentAndParentBulkImport:
         assert list(parent_profile.branches.values_list("id", flat=True)) == [
             branch.id,
         ]
+
+    def test_parent_bulk_import_deactivates_existing_parent_user(
+        self,
+        api_client,
+        user,
+        organization,
+        branch,
+    ):
+        api_client.force_authenticate(user=user)
+
+        existing_user = UserFactory(
+            email="existing.parent@example.com",
+            phone_number="+251911444444",
+            role=User.Role.PARENT,
+            is_active=True,
+        )
+        existing_user.verified_at = timezone.now()
+        existing_user.save(update_fields=["verified_at"])
+        parent_profile = Parent.objects.create(user=existing_user, is_active=True)
+
+        data = {
+            "name": ["Existing Parent"],
+            "father_name": ["Father Existing"],
+            "grandfather_name": ["Grand Existing"],
+            "email": ["existing.parent@example.com"],
+            "phone_number": ["+251911444444"],
+        }
+        df = pd.DataFrame(data)
+        csv_buf = io.StringIO()
+        df.to_csv(csv_buf, index=False)
+        media_file, storage_mock = create_csv_media(
+            user=user,
+            file_name="parents_existing.csv",
+            content=csv_buf.getvalue().encode("utf-8"),
+        )
+
+        payload = {
+            "organization": str(organization.id),
+            "branch": str(branch.id),
+            "file": str(media_file.id),
+        }
+
+        with storage_mock:
+            response = api_client.post(
+                "/api/parents/bulk-import/",
+                payload,
+                format="json",
+            )
+
+        assert response.status_code == status.HTTP_202_ACCEPTED
+
+        existing_user.refresh_from_db()
+        parent_profile.refresh_from_db()
+        assert existing_user.is_active is False
+        assert existing_user.verified_at is None
+        assert parent_profile.is_active is False
 
     def test_parent_bulk_import_validation_error_rolls_back_everything(
         self,

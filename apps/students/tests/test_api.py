@@ -95,6 +95,36 @@ class TestStudentsAPI:
         response = api_client.delete(f"/api/students/{student_id}/")
         assert response.status_code == status.HTTP_204_NO_CONTENT
 
+    def test_student_list_handles_student_without_current_section(
+        self,
+        api_client,
+        user,
+        organization,
+        branch,
+    ):
+        api_client.force_authenticate(user=user)
+        student = StudentFactory(
+            organization=organization,
+            branch=branch,
+            current_section=None,
+        )
+
+        response = api_client.get(
+            f"/api/students/?branch={branch.id}&organization={organization.id}",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        result = next(
+            item for item in response.data["results"] if item["id"] == str(student.id)
+        )
+        assert result["current_section"] is None
+        assert result["section_name"] is None
+        assert result["grade_id"] is None
+        assert result["grade_name"] is None
+        assert result["grade_level"] is None
+        assert result["academic_year_id"] is None
+        assert result["academic_year_name"] is None
+
     def test_parent_crud_and_custom_endpoints(
         self,
         api_client,
