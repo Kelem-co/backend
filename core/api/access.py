@@ -10,8 +10,25 @@ from django.db.models import Q
 from django.db.models import QuerySet
 
 if TYPE_CHECKING:
+    from academics.models import AcademicYear
+    from academics.models import Section
     from students.models import Parent
     from students.models import Student
+
+
+def teacher_section_access_filter(
+    user: Any,
+    *,
+    section_lookup: str,
+) -> Q:
+    if not getattr(user, "is_authenticated", False):
+        return Q(pk__in=[])
+
+    return Q(
+        **{f"{section_lookup}__teacher_assignments__teacher__user": user},
+    ) | Q(
+        **{f"{section_lookup}__homeroom_assignments__teacher__user": user},
+    )
 
 
 def get_branch_admin_branch_ids(user: Any) -> list[str]:
@@ -71,6 +88,57 @@ def scope_queryset_for_user(
             branch_lookup=branch_lookup,
         ),
     ).distinct()
+
+
+def scope_student_queryset_for_user(queryset: QuerySet, user: Any) -> QuerySet:
+    access_filter = user_resource_access_filter(user)
+
+    if getattr(user, "is_authenticated", False):
+        access_filter |= teacher_section_access_filter(
+            user,
+            section_lookup="current_section",
+        )
+
+    return queryset.filter(access_filter).distinct()
+
+
+def scope_attendance_queryset_for_user(queryset: QuerySet, user: Any) -> QuerySet:
+    access_filter = user_resource_access_filter(user)
+
+    if getattr(user, "is_authenticated", False):
+        access_filter |= teacher_section_access_filter(user, section_lookup="section")
+
+    return queryset.filter(access_filter).distinct()
+
+
+def scope_assessment_result_queryset_for_user(
+    queryset: QuerySet,
+    user: Any,
+) -> QuerySet:
+    access_filter = user_resource_access_filter(
+        user,
+        branch_lookup="assessment__branch",
+    )
+
+    if getattr(user, "is_authenticated", False):
+        access_filter |= Q(assessment__teacher_assignment__teacher__user=user)
+
+    return queryset.filter(access_filter).distinct()
+
+
+def scope_intervention_queryset_for_user(queryset: QuerySet, user: Any) -> QuerySet:
+    access_filter = user_resource_access_filter(
+        user,
+        branch_lookup="student__branch",
+    )
+
+    if getattr(user, "is_authenticated", False):
+        access_filter |= teacher_section_access_filter(
+            user,
+            section_lookup="student__current_section",
+        )
+
+    return queryset.filter(access_filter).distinct()
 
 
 def user_resource_access_filter(
@@ -137,6 +205,23 @@ def user_can_access_branch(user: Any, branch: Branch) -> bool:
 
 def user_can_access_student(user: Any, student: Student) -> bool:
     return user_can_access_branch(user, student.branch)
+
+
+def user_can_manage_attendance(
+    user: Any,
+    section: Section,
+    academic_year: AcademicYear,
+) -> bool:
+    if not getattr(user, "is_authenticated", False):
+        return False
+
+    if user_can_access_branch(user, section.branch):
+        return True
+
+    return section.homeroom_assignments.filter(
+        teacher__user=user,
+        academic_year=academic_year,
+    ).exists()
 
 
 def user_can_access_student_as_parent_or_staff(user: Any, student: Student) -> bool:

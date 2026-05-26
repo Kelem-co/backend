@@ -1,9 +1,10 @@
 from analytics.models import InterventionLog
 from rest_framework import viewsets
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.filters import SearchFilter
 from rest_framework.permissions import IsAuthenticated
 
-from core.api.access import scope_queryset_for_user
+from core.api.access import scope_intervention_queryset_for_user
 
 from .serializers import InterventionLogSerializer
 
@@ -42,11 +43,7 @@ class InterventionLogViewSet(viewsets.ModelViewSet):
         if getattr(self, "swagger_fake_view", False):
             return qs.none()
 
-        qs = scope_queryset_for_user(
-            qs,
-            self.request.user,
-            branch_lookup="student__branch",
-        )
+        qs = scope_intervention_queryset_for_user(qs, self.request.user)
         p = self.request.query_params
         if p.get("organization"):
             qs = qs.filter(organization_id=p["organization"])
@@ -59,3 +56,22 @@ class InterventionLogViewSet(viewsets.ModelViewSet):
         if p.get("status"):
             qs = qs.filter(status=p["status"].upper())
         return qs
+
+    def create(self, request, *args, **kwargs):
+        self._enforce_teacher_write_restrictions()
+        return super().create(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        self._enforce_teacher_write_restrictions()
+        return super().destroy(request, *args, **kwargs)
+
+    def _enforce_teacher_write_restrictions(self):
+        role = getattr(self.request.user, "role", None)
+        user_role = getattr(self.request.user, "Role", None)
+        teacher_role = getattr(user_role, "TEACHER", None)
+        if role == teacher_role:
+            message = (
+                "Teachers can update intervention logs but cannot create or delete "
+                "them."
+            )
+            raise PermissionDenied(message)

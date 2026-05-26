@@ -26,6 +26,7 @@ from students.models import ParentStudentLink
 from students.models import Student
 
 from core.api.access import scope_queryset_for_user
+from core.api.access import scope_student_queryset_for_user
 from core.api.access import user_can_access_branch
 from core.api.access import user_can_access_parent
 from core.models import ImportJob
@@ -231,7 +232,7 @@ class StudentViewSet(viewsets.ModelViewSet):
         if getattr(self, "swagger_fake_view", False):
             return qs.none()
 
-        qs = scope_queryset_for_user(qs, self.request.user)
+        qs = scope_student_queryset_for_user(qs, self.request.user)
         params = self.request.query_params
         if params.get("section"):
             qs = qs.filter(current_section_id=params["section"])
