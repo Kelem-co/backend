@@ -58,13 +58,8 @@ def normalize_phone_number(phone_number: str) -> str:
     if not digits:
         message = "Phone number must contain digits."
         raise ValueError(message)
-    if (
-        len(digits) < PHONE_NUMBER_MIN_DIGITS
-        or len(digits) > PHONE_NUMBER_MAX_DIGITS
-    ):
-        message = (
-            "Phone number must contain between 10 and 15 digits."
-        )
+    if len(digits) < PHONE_NUMBER_MIN_DIGITS or len(digits) > PHONE_NUMBER_MAX_DIGITS:
+        message = "Phone number must contain between 10 and 15 digits."
         raise ValueError(message)
 
     return f"+{digits}" if has_plus else digits
