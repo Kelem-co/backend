@@ -260,6 +260,18 @@ FRONTEND_PROTOCOL = env(
     "FRONTEND_PROTOCOL",
     default="http" if DEBUG else "https",
 )
+SMS_BACKEND = env(
+    "SMS_BACKEND",
+    default="accounts.sms.LoggingSMSBackend",
+)
+PARENT_OTP_EXPIRY_SECONDS = env.int(
+    "PARENT_OTP_EXPIRY_SECONDS",
+    default=300,
+)
+PARENT_OTP_MAX_ATTEMPTS = env.int(
+    "PARENT_OTP_MAX_ATTEMPTS",
+    default=5,
+)
 # ETHIOPIA ETRADE VERIFICATION
 # ------------------------------------------------------------------------------
 ETRADE_API_BASE_URL = env(

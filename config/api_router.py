@@ -22,6 +22,8 @@ from organizations.api.views import OrganizationViewSet
 from rest_framework.routers import DefaultRouter
 from rest_framework.routers import SimpleRouter
 from schools.api.views import SchoolViewSet
+from students.api.views import ParentCompleteInvitationView
+from students.api.views import ParentInviteView
 from students.api.views import ParentStudentLinkViewSet
 from students.api.views import ParentViewSet
 from students.api.views import StudentViewSet
@@ -111,6 +113,16 @@ urlpatterns = [
         "teachers/complete-invitation/",
         TeacherCompleteInvitationView.as_view(),
         name="teacher-complete-invitation",
+    ),
+    path(
+        "parents/invite/",
+        ParentInviteView.as_view(),
+        name="parent-invite",
+    ),
+    path(
+        "parents/complete-invitation/",
+        ParentCompleteInvitationView.as_view(),
+        name="parent-complete-invitation",
     ),
     path(
         "import-status/<str:task_id>/",

@@ -7,6 +7,7 @@ from datetime import timedelta
 from urllib.parse import urlsplit
 
 from accounts.models import ApprovalLoginToken
+from accounts.models import ParentLoginOTP
 from accounts.models import User
 from django.conf import settings
 from django.contrib.auth.tokens import default_token_generator
@@ -22,6 +23,8 @@ from .auth import get_organization_login_state
 
 APPROVAL_MAGIC_LINK_EXPIRY = timedelta(hours=24)
 APPROVAL_MAGIC_LINK_PATH = "organization-approval/{uid}/{token}"
+PHONE_NUMBER_MIN_DIGITS = 10
+PHONE_NUMBER_MAX_DIGITS = 15
 
 
 @dataclass(frozen=True)
@@ -38,6 +41,28 @@ class InvitationLink:
 
 def _hash_token_secret(secret: str) -> str:
     return hashlib.sha256(secret.encode("utf-8")).hexdigest()
+
+
+def _hash_otp_code(code: str) -> str:
+    return hashlib.sha256(code.encode("utf-8")).hexdigest()
+
+
+def normalize_phone_number(phone_number: str) -> str:
+    stripped = phone_number.strip()
+    if not stripped:
+        message = "Phone number is required."
+        raise ValueError(message)
+
+    has_plus = stripped.startswith("+")
+    digits = "".join(character for character in stripped if character.isdigit())
+    if not digits:
+        message = "Phone number must contain digits."
+        raise ValueError(message)
+    if len(digits) < PHONE_NUMBER_MIN_DIGITS or len(digits) > PHONE_NUMBER_MAX_DIGITS:
+        message = "Phone number must contain between 10 and 15 digits."
+        raise ValueError(message)
+
+    return f"+{digits}" if has_plus else digits
 
 
 def build_frontend_url(path: str) -> str:
@@ -63,6 +88,60 @@ def create_invitation_link(*, user: User, path_template: str) -> InvitationLink:
         path=path,
         full_url=build_frontend_url(path),
     )
+
+
+def create_parent_login_otp(*, user: User) -> str:
+    now = timezone.now()
+    ParentLoginOTP.objects.filter(
+        user=user,
+        used_at__isnull=True,
+    ).update(used_at=now, updated_at=now)
+
+    raw_code = f"{secrets.randbelow(1_000_000):06d}"
+    ParentLoginOTP.objects.create(
+        user=user,
+        phone_number=user.phone_number or "",
+        code_hash=_hash_otp_code(raw_code),
+        expires_at=now + timedelta(seconds=settings.PARENT_OTP_EXPIRY_SECONDS),
+    )
+    return raw_code
+
+
+@transaction.atomic
+def consume_parent_login_otp(*, user: User, raw_code: str) -> ParentLoginOTP:
+    otp = (
+        ParentLoginOTP.objects.select_for_update()
+        .filter(user=user, used_at__isnull=True)
+        .order_by("-created_at")
+        .first()
+    )
+    if otp is None or otp.expires_at <= timezone.now():
+        raise serializers.ValidationError(
+            {"otp_code": "Invalid or expired OTP code."},
+        )
+
+    if otp.failed_attempts >= settings.PARENT_OTP_MAX_ATTEMPTS:
+        otp.used_at = timezone.now()
+        otp.save(update_fields=["used_at", "updated_at"])
+        raise serializers.ValidationError(
+            {"otp_code": "Invalid or expired OTP code."},
+        )
+
+    expected_hash = _hash_otp_code(raw_code)
+    if not constant_time_compare(otp.code_hash, expected_hash):
+        otp.failed_attempts += 1
+        update_fields = ["failed_attempts", "updated_at"]
+        if otp.failed_attempts >= settings.PARENT_OTP_MAX_ATTEMPTS:
+            otp.used_at = timezone.now()
+            update_fields.append("used_at")
+        otp.save(update_fields=update_fields)
+        raise serializers.ValidationError(
+            {"otp_code": "Invalid or expired OTP code."},
+        )
+
+    otp.used_at = timezone.now()
+    otp.save(update_fields=["used_at", "updated_at"])
+    return otp
 
 
 def create_approval_magic_link(*, user: User) -> ApprovalMagicLink:

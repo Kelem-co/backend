@@ -1,4 +1,14 @@
+import secrets
+
+from accounts.models import User
+from accounts.services import create_invitation_link
+from accounts.sms import send_parent_invitation_sms
 from branches.models import Branch
+from django.contrib.auth.tokens import default_token_generator
+from django.db import transaction
+from django.utils import timezone
+from django.utils.encoding import force_str
+from django.utils.http import urlsafe_base64_decode
 from drf_spectacular.utils import OpenApiParameter
 from drf_spectacular.utils import OpenApiTypes
 from drf_spectacular.utils import extend_schema
@@ -6,9 +16,11 @@ from drf_spectacular.utils import extend_schema_view
 from rest_framework import status
 from rest_framework import viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.filters import SearchFilter
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 from students.models import Parent
 from students.models import ParentStudentLink
 from students.models import Student
@@ -20,6 +32,8 @@ from core.models import ImportJob
 from core.tasks import process_bulk_import
 
 from .serializers import BulkImportSerializer
+from .serializers import ParentCompleteInvitationSerializer
+from .serializers import ParentInviteSerializer
 from .serializers import ParentReadSerializer
 from .serializers import ParentSerializer
 from .serializers import ParentStudentLinkReadSerializer
@@ -580,3 +594,152 @@ class ParentStudentLinkViewSet(viewsets.ModelViewSet):
         if self.action in ["list", "retrieve"]:
             return ParentStudentLinkReadSerializer
         return ParentStudentLinkSerializer
+
+
+@extend_schema(request=ParentInviteSerializer)
+class ParentInviteView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = ParentInviteSerializer(
+            data=request.data,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+
+        data = serializer.validated_data
+        branch: Branch = data["branch"]
+
+        with transaction.atomic():
+            random_password = secrets.token_urlsafe(16)
+            existing_user = data.get("existing_user")
+            if existing_user is None:
+                user = User.objects.create_user(
+                    email=None,
+                    password=random_password,
+                    name=data["name"],
+                    father_name=data["father_name"],
+                    grandfather_name=data["grandfather_name"],
+                    phone_number=data["phone_number"],
+                    role=User.Role.PARENT,
+                    is_active=False,
+                )
+                parent = Parent.objects.create(
+                    user=user,
+                    secondary_phone_number=data.get("secondary_phone_number", ""),
+                    occupation=data.get("occupation", ""),
+                    work_address=data.get("work_address", ""),
+                    relationship_notes=data.get("relationship_notes", ""),
+                    emergency_contact_name=data.get("emergency_contact_name", ""),
+                    emergency_contact_phone=data.get("emergency_contact_phone", ""),
+                    is_active=True,
+                )
+            else:
+                user = existing_user
+                user.name = data["name"]
+                user.father_name = data["father_name"]
+                user.grandfather_name = data["grandfather_name"]
+                user.phone_number = data["phone_number"]
+                user.role = User.Role.PARENT
+                user.is_active = False
+                user.verified_at = None
+                user.set_password(random_password)
+                user.save(
+                    update_fields=[
+                        "name",
+                        "father_name",
+                        "grandfather_name",
+                        "phone_number",
+                        "role",
+                        "is_active",
+                        "verified_at",
+                        "password",
+                    ],
+                )
+
+                parent = user.parent_profile
+                parent.secondary_phone_number = data.get("secondary_phone_number", "")
+                parent.occupation = data.get("occupation", "")
+                parent.work_address = data.get("work_address", "")
+                parent.relationship_notes = data.get("relationship_notes", "")
+                parent.emergency_contact_name = data.get("emergency_contact_name", "")
+                parent.emergency_contact_phone = data.get(
+                    "emergency_contact_phone",
+                    "",
+                )
+                parent.is_active = True
+                parent.save(
+                    update_fields=[
+                        "secondary_phone_number",
+                        "occupation",
+                        "work_address",
+                        "relationship_notes",
+                        "emergency_contact_name",
+                        "emergency_contact_phone",
+                        "is_active",
+                        "updated_at",
+                    ],
+                )
+                parent.organizations.clear()
+                parent.branches.clear()
+
+            parent.organizations.add(branch.organization)
+            parent.branches.add(branch)
+
+            invitation_link = create_invitation_link(
+                user=user,
+                path_template="complete-parent-invitation/{uid}/{token}",
+            )
+            send_parent_invitation_sms(
+                phone_number=user.phone_number or "",
+                invitation_url=invitation_link.full_url,
+            )
+
+        return Response(
+            {
+                "message": "Parent invitation sent successfully.",
+                "invitation_url": invitation_link.full_url,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+@extend_schema(request=ParentCompleteInvitationSerializer)
+class ParentCompleteInvitationView(APIView):
+    permission_classes = []
+
+    def post(self, request):
+        serializer = ParentCompleteInvitationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        uid = serializer.validated_data["uid"]
+        token = serializer.validated_data["token"]
+
+        try:
+            user_id = force_str(urlsafe_base64_decode(uid))
+            user = User.objects.get(pk=user_id)
+        except (TypeError, ValueError, OverflowError, User.DoesNotExist) as err:
+            raise ValidationError({"uid": "Invalid user ID."}) from err
+
+        if user.role != User.Role.PARENT or user.is_active:
+            raise ValidationError({"uid": "Invalid or expired invitation."})
+
+        if not default_token_generator.check_token(user, token):
+            raise ValidationError({"token": "Invalid or expired token."})
+
+        try:
+            parent_profile = user.parent_profile
+        except Parent.DoesNotExist as err:
+            raise ValidationError({"uid": "Invalid or expired invitation."}) from err
+
+        user.is_active = True
+        user.verified_at = timezone.now()
+        user.save(update_fields=["is_active", "verified_at", "updated_at"])
+
+        parent_profile.is_active = True
+        parent_profile.save(update_fields=["is_active", "updated_at"])
+
+        return Response(
+            {"message": "Parent account activated successfully."},
+            status=status.HTTP_200_OK,
+        )
