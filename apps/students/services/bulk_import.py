@@ -297,16 +297,20 @@ class ParentBulkImportService(_BulkImportServiceBase):
                 grandfather_name=row_data["grandfather_name"],
                 phone_number=row_data["phone_number"],
                 role=User.Role.PARENT,
+                is_active=False,
             )
             user.set_unusable_password()
-            user.save()
-            return Parent.objects.create(user=user)
+            user.save(update_fields=["password"])
+            return Parent.objects.create(user=user, is_active=False)
 
         if email and existing_user.email != email:
             existing_user.email = email
-            existing_user.save(update_fields=["email"])
+        existing_user.is_active = False
+        existing_user.verified_at = None
+        existing_user.save(update_fields=["email", "is_active", "verified_at"])
 
         parent_profile, _ = Parent.objects.get_or_create(user=existing_user)
+        parent_profile.is_active = False
         return parent_profile
 
     @staticmethod
