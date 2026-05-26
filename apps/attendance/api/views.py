@@ -13,8 +13,10 @@ from rest_framework.filters import SearchFilter
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from core.api.access import scope_attendance_queryset_for_user
 from core.api.access import scope_queryset_for_user
 from core.api.access import user_can_access_student_as_parent_or_staff
+from core.api.access import user_can_manage_attendance
 from core.api.access import user_resource_access_filter
 
 from .serializers import AttendanceReadSerializer
@@ -103,7 +105,7 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         if getattr(self, "swagger_fake_view", False):
             return qs.none()
 
-        qs = scope_queryset_for_user(qs, self.request.user)
+        qs = scope_attendance_queryset_for_user(qs, self.request.user)
         p = self.request.query_params
         if p.get("organization"):
             qs = qs.filter(organization_id=p["organization"])
@@ -133,7 +135,31 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         return AttendanceSerializer
 
     def perform_create(self, serializer):
+        self._enforce_write_access(
+            serializer.validated_data["section"],
+            serializer.validated_data["academic_year"],
+        )
         serializer.save(recorded_by=self.request.user)
+
+    def perform_update(self, serializer):
+        section = serializer.validated_data.get("section", serializer.instance.section)
+        academic_year = serializer.validated_data.get(
+            "academic_year",
+            serializer.instance.academic_year,
+        )
+        self._enforce_write_access(section, academic_year)
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        self._enforce_write_access(instance.section, instance.academic_year)
+        instance.delete()
+
+    def _enforce_write_access(self, section, academic_year):
+        if user_can_manage_attendance(self.request.user, section, academic_year):
+            return
+
+        message = "You do not have permission to manage attendance for this section."
+        raise PermissionDenied(message)
 
     # ------------------------------------------------------------------
     # POST /attendance/bulk-submit/
@@ -158,6 +184,8 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         organization = data["organization"]
         branch = data["branch"]
         date = data["date"]
+
+        self._enforce_write_access(section, academic_year)
 
         created_ids = []
         skipped = []

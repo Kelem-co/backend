@@ -1,6 +1,8 @@
 import pytest
+from academics.models import AcademicYear
 from academics.tests.factories import GradeFactory
 from academics.tests.factories import SectionFactory
+from academics.tests.factories import SubjectFactory
 from accounts.tests.factories import UserFactory
 from branches.tests.factories import BranchAdminFactory
 from branches.tests.factories import BranchFactory
@@ -13,6 +15,9 @@ from students.api.views import StudentViewSet
 from students.tests.factories import ParentFactory
 from students.tests.factories import ParentStudentLinkFactory
 from students.tests.factories import StudentFactory
+from teachers.models import HomeroomAssignment
+from teachers.models import Teacher
+from teachers.models import TeacherSubjectAssignment
 
 from media.models import StatusChoices
 from media.tests.factories import MediaFileFactory
@@ -231,6 +236,161 @@ class TestStudentsAPI:
 
         assert set(queryset) == {visible_student}
         assert foreign_student not in queryset
+
+    def test_teacher_can_list_students_for_assigned_section(self, api_client):
+        teacher_user = UserFactory(role="TEACHER")
+        organization = OrganizationFactory()
+        branch = BranchFactory(school__organization=organization)
+        academic_year = AcademicYear.objects.get(
+            organization=organization,
+            branch=branch,
+            name="2025/2026",
+        )
+        grade = GradeFactory(organization=organization, branch=branch)
+        section = SectionFactory(
+            organization=organization,
+            branch=branch,
+            grade=grade,
+            academic_year=academic_year,
+        )
+        other_section = SectionFactory(
+            organization=organization,
+            branch=branch,
+            grade=grade,
+            academic_year=academic_year,
+        )
+        visible_student = StudentFactory(
+            organization=organization,
+            branch=branch,
+            current_section=section,
+        )
+        StudentFactory(
+            organization=organization,
+            branch=branch,
+            current_section=other_section,
+        )
+        teacher = Teacher.objects.create(
+            user=teacher_user,
+            organization=organization,
+            branch=branch,
+            employee_id="EMP-STU-1",
+            specialization="Mathematics",
+        )
+        subject = SubjectFactory(
+            organization=organization,
+            branch=branch,
+            grade=grade,
+        )
+        TeacherSubjectAssignment.objects.create(
+            teacher=teacher,
+            organization=organization,
+            subject=subject,
+            section=section,
+            academic_year=academic_year,
+        )
+        api_client.force_authenticate(user=teacher_user)
+
+        response = api_client.get(f"/api/students/by-section/?section={section.id}")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert [item["id"] for item in response.data] == [str(visible_student.id)]
+
+    def test_teacher_cannot_list_students_for_unassigned_section(self, api_client):
+        teacher_user = UserFactory(role="TEACHER")
+        organization = OrganizationFactory()
+        branch = BranchFactory(school__organization=organization)
+        academic_year = AcademicYear.objects.get(
+            organization=organization,
+            branch=branch,
+            name="2025/2026",
+        )
+        grade = GradeFactory(organization=organization, branch=branch)
+        assigned_section = SectionFactory(
+            organization=organization,
+            branch=branch,
+            grade=grade,
+            academic_year=academic_year,
+        )
+        other_section = SectionFactory(
+            organization=organization,
+            branch=branch,
+            grade=grade,
+            academic_year=academic_year,
+        )
+        StudentFactory(
+            organization=organization,
+            branch=branch,
+            current_section=other_section,
+        )
+        teacher = Teacher.objects.create(
+            user=teacher_user,
+            organization=organization,
+            branch=branch,
+            employee_id="EMP-STU-2",
+            specialization="English",
+        )
+        subject = SubjectFactory(
+            organization=organization,
+            branch=branch,
+            grade=grade,
+        )
+        TeacherSubjectAssignment.objects.create(
+            teacher=teacher,
+            organization=organization,
+            subject=subject,
+            section=assigned_section,
+            academic_year=academic_year,
+        )
+        api_client.force_authenticate(user=teacher_user)
+
+        response = api_client.get(
+            f"/api/students/by-section/?section={other_section.id}",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data == []
+
+    def test_homeroom_teacher_can_list_students_for_assigned_section(self, api_client):
+        teacher_user = UserFactory(role="TEACHER")
+        organization = OrganizationFactory()
+        branch = BranchFactory(school__organization=organization)
+        academic_year = AcademicYear.objects.get(
+            organization=organization,
+            branch=branch,
+            name="2025/2026",
+        )
+        grade = GradeFactory(organization=organization, branch=branch)
+        section = SectionFactory(
+            organization=organization,
+            branch=branch,
+            grade=grade,
+            academic_year=academic_year,
+        )
+        visible_student = StudentFactory(
+            organization=organization,
+            branch=branch,
+            current_section=section,
+        )
+        teacher = Teacher.objects.create(
+            user=teacher_user,
+            organization=organization,
+            branch=branch,
+            employee_id="EMP-STU-3",
+            specialization="Homeroom",
+        )
+        HomeroomAssignment.objects.create(
+            organization=organization,
+            branch=branch,
+            academic_year=academic_year,
+            section=section,
+            teacher=teacher,
+        )
+        api_client.force_authenticate(user=teacher_user)
+
+        response = api_client.get(f"/api/students/by-section/?section={section.id}")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert [item["id"] for item in response.data] == [str(visible_student.id)]
 
     def test_parent_queryset_includes_branch_admin_branch(self, user):
         organization = OrganizationFactory()

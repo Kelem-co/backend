@@ -14,7 +14,8 @@ from rest_framework.filters import SearchFilter
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from core.api.access import scope_queryset_for_user
+from core.api.access import scope_assessment_result_queryset_for_user
+from core.api.access import user_can_access_branch
 from core.api.access import user_can_access_student_as_parent_or_staff
 from core.api.access import user_resource_access_filter
 
@@ -232,11 +233,7 @@ class AssessmentResultViewSet(viewsets.ModelViewSet):
                 | Q(student__parent_links__parent__user=self.request.user),
             ).distinct()
         else:
-            qs = scope_queryset_for_user(
-                qs,
-                self.request.user,
-                branch_lookup="assessment__branch",
-            )
+            qs = scope_assessment_result_queryset_for_user(qs, self.request.user)
         p = self.request.query_params
         if p.get("organization"):
             qs = qs.filter(organization_id=p["organization"])
@@ -259,7 +256,28 @@ class AssessmentResultViewSet(viewsets.ModelViewSet):
         return AssessmentResultSerializer
 
     def perform_create(self, serializer):
+        self._enforce_teacher_result_access(
+            serializer.validated_data["assessment"],
+        )
         serializer.save(graded_by=self.request.user)
+
+    def perform_update(self, serializer):
+        assessment = serializer.validated_data.get(
+            "assessment",
+            serializer.instance.assessment,
+        )
+        self._enforce_teacher_result_access(assessment)
+        serializer.save(graded_by=self.request.user)
+
+    def _enforce_teacher_result_access(self, assessment):
+        if user_can_access_branch(self.request.user, assessment.branch):
+            return
+
+        if assessment.teacher_assignment.teacher.user_id == self.request.user.id:
+            return
+
+        message = "You do not have permission to manage results for this assessment."
+        raise PermissionDenied(message)
 
     # ------------------------------------------------------------------
     # POST /assessment-results/bulk-grade/
@@ -288,6 +306,8 @@ class AssessmentResultViewSet(viewsets.ModelViewSet):
 
         assessment = serializer.validated_data["assessment"]
         items = serializer.validated_data["results"]
+
+        self._enforce_teacher_result_access(assessment)
 
         created_ids, updated_ids, errors = [], [], []
 
