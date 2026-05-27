@@ -1,0 +1,102 @@
+#!/bin/bash
+set -euo pipefail
+
+INSTANCE_NAME="${INSTANCE_NAME}"
+
+echo "Bootstrapping node $${INSTANCE_NAME}"
+
+#############
+# Helper
+#############
+log() { echo "[user-data] $(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$@"; }
+
+DEFAULT_LOGIN_USER="${DEFAULT_LOGIN_USER}"
+
+retry() {
+  local attempts="$1"
+  local sleep_seconds="$2"
+  shift 2
+
+  local i
+  for ((i=1; i<=attempts; i++)); do
+    if "$@"; then
+      return 0
+    fi
+    sleep "$sleep_seconds"
+  done
+
+  return 1
+}
+
+install_prerequisites() {
+  log "Updating apt and installing prerequisites"
+  apt-get update -y
+  apt-get install -y --no-install-recommends curl ca-certificates gnupg2 lsb-release apt-transport-https jq unzip sudo ubuntu-keyring git
+}
+
+install_docker() {
+  if command -v docker >/dev/null 2>&1; then
+    log "Removing existing Docker installation to avoid conflicts"
+    apt-get remove -y docker.io docker-compose docker-compose-v2 docker-doc podman-docker containerd runc || true
+  fi
+
+  log "Installing Docker Engine"
+
+  install -m 0755 -d /etc/apt/keyrings
+  curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+  chmod a+r /etc/apt/keyrings/docker.asc
+
+  cat > /etc/apt/sources.list.d/docker.sources <<EOF
+Types: deb
+URIs: https://download.docker.com/linux/ubuntu
+Suites: $(. /etc/os-release && echo "$${UBUNTU_CODENAME:-$VERSION_CODENAME}")
+Components: stable
+Architectures: $(dpkg --print-architecture)
+Signed-By: /etc/apt/keyrings/docker.asc
+EOF
+
+  apt-get update -y
+  apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+  if ! systemctl is-active --quiet docker; then
+    log "Docker is not running, starting Docker service"
+    systemctl enable docker
+    systemctl restart docker
+  fi
+
+  log "Installed Docker"
+
+  log "Adding current user to docker group for non-sudo usage"
+  getent group docker >/dev/null || groupadd docker
+  if id -u $${DEFAULT_LOGIN_USER} >/dev/null 2>&1; then
+    usermod -aG docker $${DEFAULT_LOGIN_USER} || true
+  fi
+}
+
+install_aws_cli() {
+  if ! command -v aws >/dev/null 2>&1; then
+    log "Installing AWS CLI v2"
+    curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
+    unzip -q /tmp/awscliv2.zip -d /tmp
+    /tmp/aws/install --update --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin
+    rm -rf /tmp/aws /tmp/awscliv2.zip
+    log "AWS CLI installed"
+  fi
+}
+
+show_service_status() {
+  log "Bootstrap complete. Services:"
+  systemctl status docker --no-pager || true
+}
+
+#############
+# Bootstrap
+#############
+export DEBIAN_FRONTEND=noninteractive
+
+install_prerequisites
+install_docker
+install_aws_cli
+show_service_status
+
+exit 0
