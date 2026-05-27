@@ -29,11 +29,19 @@ BRANCH_NOT_FOUND_MESSAGE = "Branch not found or does not belong to organization.
 
 
 class _BulkImportServiceBase:
-    def __init__(self, file_content, file_name, organization_id, branch_id):
+    def __init__(
+        self,
+        file_content,
+        file_name,
+        organization_id,
+        branch_id,
+        current_section=None,
+    ):
         self.file_content = file_content
         self.file_name = file_name
         self.organization_id = organization_id
         self.branch_id = branch_id
+        self.current_section = current_section
         self.errors: list[dict[str, Any]] = []
 
     def _parse_dataframe(
@@ -417,16 +425,25 @@ class StudentBulkImportService(_BulkImportServiceBase):
             row.get("admission_date"),
             row_errors,
         )
-        section = self._resolve_section(
-            branch=branch,
-            section_name=section_name,
-            grade_name=grade_name,
-            row_errors=row_errors,
+        override_section = self.current_section
+        section = (
+            override_section
+            if override_section is not None
+            else self._resolve_section(
+                branch=branch,
+                section_name=section_name,
+                grade_name=grade_name,
+                row_errors=row_errors,
+            )
         )
-        academic_year = self._resolve_academic_year(
-            section=section,
-            current_academic_year=current_academic_year,
-            row_errors=row_errors,
+        academic_year = (
+            override_section.academic_year
+            if override_section is not None
+            else self._resolve_academic_year(
+                section=section,
+                current_academic_year=current_academic_year,
+                row_errors=row_errors,
+            )
         )
         self._validate_roll_number(
             roll_no=roll_no,

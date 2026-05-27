@@ -1,4 +1,5 @@
 from academics.models import AcademicYear
+from academics.models import Section
 from accounts.api.serializers import UserSerializer
 from accounts.models import User
 from accounts.services import normalize_phone_number
@@ -640,3 +641,46 @@ class BulkImportSerializer(serializers.Serializer):
     file = MediaFileReferenceField()
     organization = serializers.UUIDField()
     branch = serializers.UUIDField()
+    current_section = serializers.PrimaryKeyRelatedField(
+        queryset=Section.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        current_section = attrs.get("current_section")
+        organization_id = attrs.get("organization")
+        branch_id = attrs.get("branch")
+
+        if current_section is None:
+            return attrs
+
+        if current_section.branch_id != branch_id:
+            raise ValidationError(
+                {
+                    "current_section": (
+                        "Current section must belong to the selected branch."
+                    ),
+                },
+            )
+
+        if current_section.organization_id != organization_id:
+            raise ValidationError(
+                {
+                    "current_section": (
+                        "Current section must belong to the selected organization."
+                    ),
+                },
+            )
+
+        if current_section.academic_year_id is None:
+            raise ValidationError(
+                {
+                    "current_section": (
+                        "Current section must belong to an academic year."
+                    ),
+                },
+            )
+
+        return attrs

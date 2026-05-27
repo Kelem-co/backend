@@ -24,11 +24,19 @@ BRANCH_NOT_FOUND_MESSAGE = "Branch not found or does not belong to organization.
 
 
 class TeacherBulkImportService:
-    def __init__(self, file_content, file_name, organization_id, branch_id):
+    def __init__(
+        self,
+        file_content,
+        file_name,
+        organization_id,
+        branch_id,
+        current_section=None,
+    ):
         self.file_content = file_content
         self.file_name = file_name
         self.organization_id = organization_id
         self.branch_id = branch_id
+        self.current_section = current_section
         self.errors: list[dict[str, Any]] = []
 
     def run(self) -> tuple[bool, list[dict[str, Any]]]:
@@ -45,6 +53,9 @@ class TeacherBulkImportService:
             return False, self.errors
 
         self._create_teachers(prepared_rows, org, branch)
+        if self.errors:
+            return False, self.errors
+
         return True, []
 
     def _parse_dataframe(self) -> tuple[pd.DataFrame | None, list[dict[str, Any]]]:

@@ -22,6 +22,9 @@ from students.models import StudentAcademicYearSection
 from core.models import ImportJob
 from media.tests.factories import MediaFileFactory
 
+IMPORTED_STUDENT_COUNT = 2
+CURRENT_SECTION_ORG_ERROR = "Current section must belong to the selected organization."
+
 
 def create_csv_media(*, user, file_name: str, content: bytes):
     media_file = MediaFileFactory(
@@ -387,6 +390,302 @@ class TestStudentAndParentBulkImport:
                     "roll_no": [
                         "Duplicate roll number in this section within the sheet.",
                     ],
+                },
+            },
+        ]
+
+    def test_student_bulk_import_uses_request_current_section(
+        self,
+        api_client,
+        user,
+        organization,
+        branch,
+        section,
+    ):
+        api_client.force_authenticate(user=user)
+
+        other_grade = GradeFactory(
+            organization=organization,
+            branch=branch,
+            name="Grade 10",
+        )
+        other_section = SectionFactory(
+            organization=organization,
+            branch=branch,
+            grade=other_grade,
+            name="Section B",
+            academic_year=section.academic_year,
+        )
+
+        data = {
+            "first_name": ["Alice", "Bob"],
+            "last_name": ["Green", "Brown"],
+            "gender": ["FEMALE", "MALE"],
+            "date_of_birth": ["2015-05-20", "2016-06-18"],
+            "roll_no": ["R801", "R802"],
+            "section_name": ["Section A", ""],
+            "grade_name": ["Grade 9", ""],
+        }
+        df = pd.DataFrame(data)
+        csv_buf = io.StringIO()
+        df.to_csv(csv_buf, index=False)
+        media_file, storage_mock = create_csv_media(
+            user=user,
+            file_name="students_override.csv",
+            content=csv_buf.getvalue().encode("utf-8"),
+        )
+
+        payload = {
+            "organization": str(organization.id),
+            "branch": str(branch.id),
+            "file": str(media_file.id),
+            "current_section": str(other_section.id),
+        }
+
+        with storage_mock:
+            response = api_client.post(
+                "/api/students/bulk-import/",
+                payload,
+                format="json",
+            )
+        assert response.status_code == status.HTTP_202_ACCEPTED
+
+        assert ImportJob.objects.get(module="students").current_section == other_section
+        assert (
+            Student.objects.filter(current_section=other_section).count()
+            == IMPORTED_STUDENT_COUNT
+        )
+        assert Student.objects.filter(current_section=section).count() == 0
+        assert (
+            StudentAcademicYearSection.objects.filter(
+                academic_year=other_section.academic_year,
+                section=other_section,
+            ).count()
+            == IMPORTED_STUDENT_COUNT
+        )
+
+    def test_student_bulk_import_rejects_request_current_section_from_other_branch(
+        self,
+        api_client,
+        user,
+        organization,
+        branch,
+    ):
+        api_client.force_authenticate(user=user)
+
+        other_branch = BranchFactory(school__organization=organization)
+        other_grade = GradeFactory(
+            organization=organization,
+            branch=other_branch,
+            name="Grade 11",
+        )
+        other_section = SectionFactory(
+            organization=organization,
+            branch=other_branch,
+            grade=other_grade,
+            academic_year=AcademicYear.objects.get(
+                organization=organization,
+                branch=other_branch,
+                is_current=True,
+            ),
+        )
+        media_file = MediaFileFactory(
+            uploaded_by=user,
+            file_name="students.csv",
+            content_type="text/csv",
+        )
+
+        response = api_client.post(
+            "/api/students/bulk-import/",
+            {
+                "organization": str(organization.id),
+                "branch": str(branch.id),
+                "file": str(media_file.id),
+                "current_section": str(other_section.id),
+            },
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data == {
+            "errors": [
+                {
+                    "code": "invalid",
+                    "detail": "Current section must belong to the selected branch.",
+                    "field": "current_section",
+                },
+            ],
+        }
+
+    def test_student_bulk_import_rejects_request_section_from_other_organization(
+        self,
+        api_client,
+        user,
+        organization,
+        branch,
+    ):
+        api_client.force_authenticate(user=user)
+
+        other_user = UserFactory(is_superuser=True)
+        other_organization = OrganizationFactory(owner=other_user)
+        other_grade = GradeFactory(
+            organization=organization,
+            branch=branch,
+            name="Grade 12",
+        )
+        other_section = SectionFactory(
+            organization=organization,
+            branch=branch,
+            grade=other_grade,
+            academic_year=AcademicYear.objects.get(
+                organization=organization,
+                branch=branch,
+                is_current=True,
+            ),
+        )
+        other_section.organization = other_organization
+        other_section.save(update_fields=["organization"])
+        media_file = MediaFileFactory(
+            uploaded_by=user,
+            file_name="students.csv",
+            content_type="text/csv",
+        )
+
+        response = api_client.post(
+            "/api/students/bulk-import/",
+            {
+                "organization": str(organization.id),
+                "branch": str(branch.id),
+                "file": str(media_file.id),
+                "current_section": str(other_section.id),
+            },
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data == {
+            "errors": [
+                {
+                    "code": "invalid",
+                    "detail": CURRENT_SECTION_ORG_ERROR,
+                    "field": "current_section",
+                },
+            ],
+        }
+
+    def test_student_bulk_import_rolls_back_with_request_current_section(
+        self,
+        api_client,
+        user,
+        organization,
+        branch,
+        section,
+    ):
+        api_client.force_authenticate(user=user)
+
+        data = {
+            "first_name": ["Alice", "Bob"],
+            "last_name": ["Green", "Brown"],
+            "gender": ["FEMALE", "MALE"],
+            "date_of_birth": ["2015-05-20", "2016-06-18"],
+            "roll_no": ["R900", "R900"],
+        }
+        df = pd.DataFrame(data)
+        csv_buf = io.StringIO()
+        df.to_csv(csv_buf, index=False)
+        media_file, storage_mock = create_csv_media(
+            user=user,
+            file_name="students_request_section_error.csv",
+            content=csv_buf.getvalue().encode("utf-8"),
+        )
+
+        with storage_mock:
+            response = api_client.post(
+                "/api/students/bulk-import/",
+                {
+                    "organization": str(organization.id),
+                    "branch": str(branch.id),
+                    "file": str(media_file.id),
+                    "current_section": str(section.id),
+                },
+                format="json",
+            )
+        assert response.status_code == status.HTTP_202_ACCEPTED
+
+        assert Student.objects.count() == 0
+        job = ImportJob.objects.last()
+        assert job.status == ImportJob.Status.FAILED
+        assert job.errors == [
+            {
+                "row": 3,
+                "errors": {
+                    "roll_no": [
+                        "Duplicate roll number in this section within the sheet.",
+                    ],
+                },
+            },
+        ]
+
+    def test_student_bulk_import_rejects_duplicate_roll_number_in_overridden_section(
+        self,
+        api_client,
+        user,
+        organization,
+        branch,
+        section,
+    ):
+        api_client.force_authenticate(user=user)
+
+        Student.objects.create(
+            organization=organization,
+            branch=branch,
+            first_name="Existing",
+            last_name="Student",
+            gender="MALE",
+            date_of_birth=date(2014, 1, 1),
+            roll_no="R999",
+            current_section=section,
+            admission_date=date(2024, 1, 1),
+        )
+
+        data = {
+            "first_name": ["Alice"],
+            "last_name": ["Green"],
+            "gender": ["FEMALE"],
+            "date_of_birth": ["2015-05-20"],
+            "roll_no": ["R999"],
+            "section_name": [""],
+            "grade_name": [""],
+        }
+        df = pd.DataFrame(data)
+        csv_buf = io.StringIO()
+        df.to_csv(csv_buf, index=False)
+        media_file, storage_mock = create_csv_media(
+            user=user,
+            file_name="students_duplicate_section.csv",
+            content=csv_buf.getvalue().encode("utf-8"),
+        )
+
+        with storage_mock:
+            response = api_client.post(
+                "/api/students/bulk-import/",
+                {
+                    "organization": str(organization.id),
+                    "branch": str(branch.id),
+                    "file": str(media_file.id),
+                    "current_section": str(section.id),
+                },
+                format="json",
+            )
+        assert response.status_code == status.HTTP_202_ACCEPTED
+
+        job = ImportJob.objects.last()
+        assert job.status == ImportJob.Status.FAILED
+        assert job.errors == [
+            {
+                "row": 2,
+                "errors": {
+                    "roll_no": ["Roll number already exists in this section."],
                 },
             },
         ]
