@@ -1,0 +1,55 @@
+#!/bin/bash
+set -euo pipefail
+
+INSTANCE_NAME="${INSTANCE_NAME}"
+
+echo "Bootstrapping LocalStack node ${INSTANCE_NAME}"
+
+#############
+# Helpers
+#############
+log() { echo "[user-data-local] $(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$@"; }
+
+retry() {
+  local attempts="$1"
+  local sleep_seconds="$2"
+  shift 2
+
+  local i
+  for ((i=1; i<=attempts; i++)); do
+    if "$@"; then
+      return 0
+    fi
+    sleep "$sleep_seconds"
+  done
+
+  return 1
+}
+
+#############
+# Preinstall
+#############
+export DEBIAN_FRONTEND=noninteractive
+log "Updating apt and installing prerequisites"
+apt-get update -y
+apt-get install -y --no-install-recommends curl ca-certificates gnupg2 lsb-release apt-transport-https jq unzip sudo ubuntu-keyring git
+
+#############
+# Docker
+#############
+if command -v docker >/dev/null 2>&1; then
+  log "Docker client already available; leaving existing runtime untouched"
+else
+  log "Skipping Docker Engine install because LocalStack containers do not provide systemd"
+fi
+
+#############
+# Final notes and health checks
+#############
+log "Bootstrap complete. Process health:"
+
+if command -v docker >/dev/null 2>&1; then
+  docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}' || true
+fi
+
+exit 0

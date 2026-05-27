@@ -1,0 +1,26 @@
+formatter: markdown
+header-from: main.tf
+settings:
+  anchor: true
+  color: true
+  default: true
+  escape: true
+  html: true
+  indent: 2
+  required: true
+  sensitive: true
+  type: true
+  lockfile: false
+
+recursive:
+  enabled: false
+  path: projects/
+  include-main: false
+
+sort:
+  enabled: true
+  by: required
+
+output:
+  file: INFRA.md
+  mode: inject
