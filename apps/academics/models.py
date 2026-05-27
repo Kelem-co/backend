@@ -163,3 +163,51 @@ class GradeSubject(UUIDModel, TimeStampedModel):
 
     def __str__(self):
         return f"{self.grade.name} — {self.subject.name}"
+
+
+class CalendarDocument(UUIDModel, TimeStampedModel):
+    organization = models.ForeignKey(
+        "organizations.Organization",
+        on_delete=models.CASCADE,
+        related_name="calendar_documents",
+        verbose_name=_("Organization"),
+    )
+    branch = models.ForeignKey(
+        "branches.Branch",
+        on_delete=models.CASCADE,
+        related_name="calendar_documents",
+        verbose_name=_("Branch"),
+    )
+    academic_year = models.ForeignKey(
+        AcademicYear,
+        on_delete=models.CASCADE,
+        related_name="calendar_documents",
+        null=True,
+        blank=True,
+        verbose_name=_("Academic Year"),
+    )
+    media_file = models.ForeignKey(
+        "media.MediaFile",
+        on_delete=models.SET_NULL,
+        related_name="calendar_documents",
+        null=True,
+        blank=True,
+        verbose_name=_("Media File"),
+    )
+
+    class Meta:
+        verbose_name = _("Calendar Document")
+        verbose_name_plural = _("Calendar Documents")
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "branch", "academic_year"],
+                name="unique_calendar_document_per_scope",
+            ),
+        ]
+
+    def __str__(self):
+        academic_year_name = (
+            self.academic_year.name if self.academic_year else "no year"
+        )
+        return f"{self.branch.name} - {academic_year_name}"

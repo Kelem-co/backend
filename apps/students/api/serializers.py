@@ -354,10 +354,78 @@ class StudentReadSerializer(StudentSerializer):
 class ParentSerializer(serializers.ModelSerializer):
     """Write serializer for parent profiles."""
 
+    organization_ids = serializers.SerializerMethodField()
+    branch_ids = serializers.SerializerMethodField()
+
     class Meta:
         model = Parent
-        fields = PARENT_BASE_FIELDS
+        fields = [
+            *PARENT_BASE_FIELDS,
+            "organization_ids",
+            "branch_ids",
+        ]
         read_only_fields = ["id", "created_at", "updated_at"]
+
+    @staticmethod
+    def _extract_input_values(data, field_name: str):
+        if hasattr(data, "getlist"):
+            values = data.getlist(field_name)
+            if values:
+                return values
+        return data.get(field_name)
+
+    @staticmethod
+    def _normalize_input_values(values) -> list[str]:
+        if values is None:
+            return []
+        if isinstance(values, (list, tuple)):
+            return [str(value) for value in values]
+        return [str(values)]
+
+    def to_internal_value(self, data):
+        incoming_data = data.copy()
+        alias_map = {
+            "organization_ids": "organizations",
+            "branch_ids": "branches",
+        }
+
+        for alias, canonical in alias_map.items():
+            alias_values = self._extract_input_values(data, alias)
+            canonical_values = self._extract_input_values(data, canonical)
+
+            if alias_values is None:
+                continue
+
+            if canonical_values is not None:
+                normalized_aliases = self._normalize_input_values(alias_values)
+                normalized_canonical = self._normalize_input_values(canonical_values)
+                if normalized_aliases != normalized_canonical:
+                    raise ValidationError(
+                        {
+                            alias: (
+                                f"{alias} must match {canonical} when both are "
+                                "provided."
+                            ),
+                        },
+                    )
+                continue
+
+            if hasattr(incoming_data, "setlist"):
+                incoming_data.setlist(alias, [])
+                incoming_data.setlist(
+                    canonical,
+                    self._normalize_input_values(alias_values),
+                )
+            else:
+                incoming_data[canonical] = alias_values
+
+        return super().to_internal_value(incoming_data)
+
+    def get_organization_ids(self, obj) -> list[str]:
+        return [str(organization.id) for organization in obj.organizations.all()]
+
+    def get_branch_ids(self, obj) -> list[str]:
+        return [str(branch.id) for branch in obj.branches.all()]
 
     def validate(self, attrs):
         user = attrs.get("user", getattr(self.instance, "user", None))
@@ -434,7 +502,7 @@ class ParentReadSerializer(ParentSerializer):
 
     class Meta(ParentSerializer.Meta):
         fields = [
-            *PARENT_BASE_FIELDS,
+            *ParentSerializer.Meta.fields,
             "user_details",
             "organization_details",
             "branch_details",
