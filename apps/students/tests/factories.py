@@ -1,4 +1,5 @@
 import factory
+from academics.tests.factories import AcademicYearFactory
 from academics.tests.factories import SectionFactory
 from accounts.tests.factories import UserFactory
 from branches.tests.factories import BranchFactory
@@ -7,6 +8,7 @@ from organizations.tests.factories import OrganizationFactory
 from students.models import Parent
 from students.models import ParentStudentLink
 from students.models import Student
+from students.models import StudentAcademicYearSection
 
 
 class StudentFactory(DjangoModelFactory):
@@ -74,3 +76,12 @@ class ParentStudentLinkFactory(DjangoModelFactory):
             return
         self.parent.organizations.add(self.student.organization)
         self.parent.branches.add(self.student.branch)
+
+
+class StudentAcademicYearSectionFactory(DjangoModelFactory):
+    student = factory.SubFactory(StudentFactory)
+    academic_year = factory.SubFactory(AcademicYearFactory)
+    section = None
+
+    class Meta:
+        model = StudentAcademicYearSection

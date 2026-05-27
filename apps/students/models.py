@@ -139,6 +139,17 @@ class Student(UUIDModel, TimeStampedModel):
     def __str__(self):
         return f"{self.first_name} {self.last_name} ({self.roll_no})"
 
+    def sync_current_section_from_academic_year(self, academic_year) -> None:
+        if not academic_year.is_current:
+            return
+
+        self.current_section_id = (
+            self.academic_year_sections.filter(academic_year=academic_year)
+            .values_list("section", flat=True)
+            .first()
+        )
+        self.save(update_fields=["current_section", "updated_at"])
+
     @property
     def parents(self):
         """Returns parent profiles linked to this student."""
@@ -148,6 +159,77 @@ class Student(UUIDModel, TimeStampedModel):
                 "parent__user",
             )
         ]
+
+
+class StudentAcademicYearSection(UUIDModel, TimeStampedModel):
+    student = models.ForeignKey(
+        Student,
+        on_delete=models.CASCADE,
+        related_name="academic_year_sections",
+        verbose_name=_("Student"),
+    )
+    academic_year = models.ForeignKey(
+        "academics.AcademicYear",
+        on_delete=models.CASCADE,
+        related_name="student_sections",
+        verbose_name=_("Academic Year"),
+    )
+    section = models.ForeignKey(
+        "academics.Section",
+        on_delete=models.PROTECT,
+        related_name="student_academic_year_sections",
+        verbose_name=_("Section"),
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        verbose_name = _("Student Academic Year Section")
+        verbose_name_plural = _("Student Academic Year Sections")
+        unique_together = ("student", "academic_year")
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.student} - {self.academic_year}"
+
+    def clean(self):
+        super().clean()
+
+        if not self.student_id or not self.academic_year_id:
+            return
+
+        errors: dict[str, str] = {}
+
+        if self.academic_year.branch_id != self.student.branch_id:
+            errors["academic_year"] = _(
+                "Academic year must belong to the student's branch.",
+            )
+
+        if self.academic_year.organization_id != self.student.organization_id:
+            errors["academic_year"] = _(
+                "Academic year must belong to the student's organization.",
+            )
+
+        if self.section_id is None:
+            if errors:
+                raise ValidationError(errors)
+            return
+
+        if self.section.branch_id != self.student.branch_id:
+            errors["section"] = _("Section must belong to the student's branch.")
+
+        if self.section.organization_id != self.student.organization_id:
+            errors["section"] = _(
+                "Section must belong to the student's organization.",
+            )
+
+        if self.section.academic_year_id != self.academic_year_id:
+            errors["section"] = _(
+                "Section must belong to the selected academic year.",
+            )
+
+        if errors:
+            raise ValidationError(errors)
 
 
 class ParentStudentLink(UUIDModel, TimeStampedModel):

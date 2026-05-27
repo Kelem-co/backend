@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pytest
+from academics.models import AcademicYear
 from academics.tests.factories import GradeFactory
 from academics.tests.factories import SectionFactory
 from branches.tests.factories import BranchFactory
@@ -26,12 +27,18 @@ def _build_student_import_context():
         status="ACTIVE",
     )
     branch = BranchFactory(school=school)
+    academic_year = AcademicYear.objects.get(
+        organization=organization,
+        branch=branch,
+        is_current=True,
+    )
     grade = GradeFactory(organization=organization, branch=branch, name="Grade 1")
     section = SectionFactory(
         organization=organization,
         branch=branch,
         grade=grade,
         name="Section A",
+        academic_year=academic_year,
     )
 
     return organization, branch, section

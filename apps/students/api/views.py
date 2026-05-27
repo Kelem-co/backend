@@ -6,6 +6,7 @@ from accounts.sms import send_parent_invitation_sms
 from branches.models import Branch
 from django.contrib.auth.tokens import default_token_generator
 from django.db import transaction
+from django.db.models import Prefetch
 from django.utils import timezone
 from django.utils.encoding import force_str
 from django.utils.http import urlsafe_base64_decode
@@ -24,6 +25,7 @@ from rest_framework.views import APIView
 from students.models import Parent
 from students.models import ParentStudentLink
 from students.models import Student
+from students.models import StudentAcademicYearSection
 
 from core.api.access import scope_queryset_for_user
 from core.api.access import scope_student_queryset_for_user
@@ -221,34 +223,77 @@ class StudentViewSet(viewsets.ModelViewSet):
         "current_section__grade__name",
     ]
 
-    def get_queryset(self):
-        qs = Student.objects.select_related(
+    def _base_queryset(self):
+        return Student.objects.select_related(
             "current_section__grade",
             "current_section__academic_year",
             "branch",
             "organization",
             "photo",
         )
+
+    def _apply_academic_year_filters(self, queryset, academic_year_id):
+        filtered_assignment_qs = StudentAcademicYearSection.objects.filter(
+            academic_year_id=academic_year_id,
+        ).select_related(
+            "academic_year",
+            "section__grade",
+        )
+        queryset = queryset.prefetch_related(
+            Prefetch(
+                "academic_year_sections",
+                queryset=filtered_assignment_qs,
+                to_attr="filtered_academic_year_sections",
+            ),
+        ).filter(
+            academic_year_sections__academic_year_id=academic_year_id,
+        )
+
+        params = self.request.query_params
+        if params.get("section"):
+            queryset = queryset.filter(
+                academic_year_sections__section_id=params["section"],
+            )
+        if params.get("grade"):
+            queryset = queryset.filter(
+                academic_year_sections__section__grade_id=params["grade"],
+            )
+
+        return queryset
+
+    def _apply_current_section_filters(self, queryset):
+        params = self.request.query_params
+        if params.get("section"):
+            queryset = queryset.filter(current_section_id=params["section"])
+        if params.get("grade"):
+            queryset = queryset.filter(current_section__grade_id=params["grade"])
+        return queryset
+
+    def get_queryset(self):
+        params = self.request.query_params
+        qs = self._base_queryset()
         if getattr(self, "swagger_fake_view", False):
             return qs.none()
 
-        qs = scope_student_queryset_for_user(qs, self.request.user)
-        params = self.request.query_params
-        if params.get("section"):
-            qs = qs.filter(current_section_id=params["section"])
-        if params.get("grade"):
-            qs = qs.filter(current_section__grade_id=params["grade"])
+        academic_year_id = params.get("academic_year")
+        qs = scope_student_queryset_for_user(
+            qs,
+            self.request.user,
+            academic_year_id=academic_year_id,
+        )
+        if academic_year_id:
+            qs = self._apply_academic_year_filters(qs, academic_year_id)
+        else:
+            qs = self._apply_current_section_filters(qs)
         if params.get("branch"):
             qs = qs.filter(branch_id=params["branch"])
         if params.get("organization"):
             qs = qs.filter(organization_id=params["organization"])
-        if params.get("academic_year"):
-            qs = qs.filter(current_section__academic_year_id=params["academic_year"])
         if params.get("status"):
             qs = qs.filter(status=params["status"].upper())
         if params.get("gender"):
             qs = qs.filter(gender=params["gender"].upper())
-        return qs
+        return qs.distinct()
 
     def get_serializer_class(self):
         if self.action == "bulk_import":
@@ -322,9 +367,17 @@ class StudentViewSet(viewsets.ModelViewSet):
                 {"detail": "Query parameter 'section' is required."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        qs = self.get_queryset().filter(current_section_id=section_id)
+        qs = self.get_queryset()
+        if request.query_params.get("academic_year"):
+            qs = qs.filter(academic_year_sections__section_id=section_id)
+        else:
+            qs = qs.filter(current_section_id=section_id)
         qs = self.filter_queryset(qs)
-        serializer = StudentReadSerializer(qs, many=True)
+        serializer = StudentReadSerializer(
+            qs,
+            many=True,
+            context={"request": request},
+        )
         return Response(serializer.data)
 
     # ------------------------------------------------------------------
@@ -346,9 +399,17 @@ class StudentViewSet(viewsets.ModelViewSet):
                 {"detail": "Query parameter 'grade' is required."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        qs = self.get_queryset().filter(current_section__grade_id=grade_id)
+        qs = self.get_queryset()
+        if request.query_params.get("academic_year"):
+            qs = qs.filter(academic_year_sections__section__grade_id=grade_id)
+        else:
+            qs = qs.filter(current_section__grade_id=grade_id)
         qs = self.filter_queryset(qs)
-        serializer = StudentReadSerializer(qs, many=True)
+        serializer = StudentReadSerializer(
+            qs,
+            many=True,
+            context={"request": request},
+        )
         return Response(serializer.data)
 
 

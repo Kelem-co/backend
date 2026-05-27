@@ -12,8 +12,11 @@ from rest_framework.test import APIClient
 from rest_framework.test import APIRequestFactory
 from students.api.views import ParentViewSet
 from students.api.views import StudentViewSet
+from students.models import Student
+from students.models import StudentAcademicYearSection
 from students.tests.factories import ParentFactory
 from students.tests.factories import ParentStudentLinkFactory
+from students.tests.factories import StudentAcademicYearSectionFactory
 from students.tests.factories import StudentFactory
 from teachers.models import HomeroomAssignment
 from teachers.models import Teacher
@@ -43,11 +46,17 @@ class TestStudentsAPI:
 
     @pytest.fixture
     def section(self, organization, branch):
+        academic_year = AcademicYear.objects.get(
+            organization=organization,
+            branch=branch,
+            is_current=True,
+        )
         grade = GradeFactory(organization=organization, branch=branch)
         return SectionFactory(
             organization=organization,
             branch=branch,
             grade=grade,
+            academic_year=academic_year,
         )
 
     def test_student_crud(self, api_client, user, organization, branch, section):
@@ -61,6 +70,7 @@ class TestStudentsAPI:
         data = {
             "organization": str(organization.id),
             "branch": str(branch.id),
+            "academic_year": str(section.academic_year_id),
             "first_name": "Alice",
             "last_name": "Smith",
             "gender": "FEMALE",
@@ -75,6 +85,11 @@ class TestStudentsAPI:
         assert response.status_code == status.HTTP_201_CREATED
         student_id = response.data["id"]
         assert str(response.data["photo"]) == str(media.id)
+        assert StudentAcademicYearSection.objects.filter(
+            student_id=student_id,
+            academic_year=section.academic_year,
+            section=section,
+        ).exists()
 
         response = api_client.get("/api/students/")
         assert response.status_code == status.HTTP_200_OK
@@ -108,6 +123,15 @@ class TestStudentsAPI:
             branch=branch,
             current_section=None,
         )
+        StudentAcademicYearSectionFactory(
+            student=student,
+            academic_year=AcademicYear.objects.get(
+                organization=organization,
+                branch=branch,
+                is_current=True,
+            ),
+            section=None,
+        )
 
         response = api_client.get(
             f"/api/students/?branch={branch.id}&organization={organization.id}",
@@ -124,6 +148,212 @@ class TestStudentsAPI:
         assert result["grade_level"] is None
         assert result["academic_year_id"] is None
         assert result["academic_year_name"] is None
+
+    def test_student_list_by_academic_year_includes_year_scoped_section(
+        self,
+        api_client,
+        user,
+        organization,
+        branch,
+        section,
+    ):
+        api_client.force_authenticate(user=user)
+        student_with_section = StudentFactory(
+            organization=organization,
+            branch=branch,
+            current_section=section,
+        )
+        StudentAcademicYearSectionFactory(
+            student=student_with_section,
+            academic_year=section.academic_year,
+            section=section,
+        )
+        student_without_section = StudentFactory(
+            organization=organization,
+            branch=branch,
+            current_section=None,
+        )
+        StudentAcademicYearSectionFactory(
+            student=student_without_section,
+            academic_year=section.academic_year,
+            section=None,
+        )
+
+        response = api_client.get(
+            f"/api/students/?academic_year={section.academic_year_id}",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        results = {item["id"]: item for item in response.data["results"]}
+        assert results[str(student_with_section.id)]["current_section"] == str(
+            section.id,
+        )
+        assert results[str(student_with_section.id)]["academic_year_id"] == str(
+            section.academic_year_id,
+        )
+        assert results[str(student_without_section.id)]["current_section"] is None
+        assert results[str(student_without_section.id)]["academic_year_id"] == str(
+            section.academic_year_id,
+        )
+        assert results[str(student_without_section.id)]["section_name"] is None
+
+    def test_student_create_without_section_creates_year_mapping(
+        self,
+        api_client,
+        user,
+        organization,
+        branch,
+    ):
+        api_client.force_authenticate(user=user)
+        academic_year = AcademicYear.objects.get(
+            organization=organization,
+            branch=branch,
+            is_current=True,
+        )
+
+        response = api_client.post(
+            "/api/students/",
+            {
+                "organization": str(organization.id),
+                "branch": str(branch.id),
+                "academic_year": str(academic_year.id),
+                "first_name": "No",
+                "last_name": "Section",
+                "gender": "MALE",
+                "date_of_birth": "2015-05-20",
+                "roll_no": "R102",
+                "current_section": None,
+                "admission_date": "2023-09-01",
+                "status": "ACTIVE",
+            },
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        student = Student.objects.get(id=response.data["id"])
+        assert student.current_section is None
+        assert StudentAcademicYearSection.objects.filter(
+            student=student,
+            academic_year=academic_year,
+            section=None,
+        ).exists()
+
+    def test_student_patch_non_current_year_does_not_change_current_section(
+        self,
+        api_client,
+        user,
+        organization,
+        branch,
+        section,
+    ):
+        api_client.force_authenticate(user=user)
+        non_current_year = AcademicYear.objects.create(
+            organization=organization,
+            branch=branch,
+            name="2024/2025",
+            start_date=section.academic_year.start_date,
+            end_date=section.academic_year.end_date,
+            is_current=False,
+        )
+        other_section = SectionFactory(
+            organization=organization,
+            branch=branch,
+            grade=section.grade,
+            academic_year=non_current_year,
+        )
+        student = StudentFactory(
+            organization=organization,
+            branch=branch,
+            current_section=section,
+        )
+        StudentAcademicYearSectionFactory(
+            student=student,
+            academic_year=section.academic_year,
+            section=section,
+        )
+
+        response = api_client.patch(
+            f"/api/students/{student.id}/",
+            {
+                "academic_year": str(non_current_year.id),
+                "current_section": str(other_section.id),
+            },
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        student.refresh_from_db()
+        assert student.current_section == section
+        assert StudentAcademicYearSection.objects.filter(
+            student=student,
+            academic_year=non_current_year,
+            section=other_section,
+        ).exists()
+
+    def test_student_patch_current_year_syncs_current_section(
+        self,
+        api_client,
+        user,
+        organization,
+        branch,
+        section,
+    ):
+        api_client.force_authenticate(user=user)
+        student = StudentFactory(
+            organization=organization,
+            branch=branch,
+            current_section=None,
+        )
+        StudentAcademicYearSectionFactory(
+            student=student,
+            academic_year=section.academic_year,
+            section=None,
+        )
+
+        response = api_client.patch(
+            f"/api/students/{student.id}/",
+            {
+                "academic_year": str(section.academic_year_id),
+                "current_section": str(section.id),
+            },
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        student.refresh_from_db()
+        assert student.current_section == section
+        assert StudentAcademicYearSection.objects.filter(
+            student=student,
+            academic_year=section.academic_year,
+            section=section,
+        ).exists()
+
+    def test_student_list_by_academic_year_and_section_uses_year_scoped_mapping(
+        self,
+        api_client,
+        user,
+        organization,
+        branch,
+        section,
+    ):
+        api_client.force_authenticate(user=user)
+        student = StudentFactory(
+            organization=organization,
+            branch=branch,
+            current_section=None,
+        )
+        StudentAcademicYearSectionFactory(
+            student=student,
+            academic_year=section.academic_year,
+            section=section,
+        )
+
+        response = api_client.get(
+            f"/api/students/?academic_year={section.academic_year_id}&section={section.id}",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert [item["id"] for item in response.data["results"]] == [str(student.id)]
 
     def test_parent_crud_and_custom_endpoints(
         self,

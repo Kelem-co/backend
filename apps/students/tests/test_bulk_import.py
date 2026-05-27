@@ -4,6 +4,7 @@ from unittest import mock
 
 import pandas as pd
 import pytest
+from academics.models import AcademicYear
 from academics.tests.factories import GradeFactory
 from academics.tests.factories import SectionFactory
 from accounts.models import User
@@ -16,6 +17,7 @@ from rest_framework.test import APIClient
 from students.models import Parent
 from students.models import ParentStudentLink
 from students.models import Student
+from students.models import StudentAcademicYearSection
 
 from core.models import ImportJob
 from media.tests.factories import MediaFileFactory
@@ -53,12 +55,18 @@ class TestStudentAndParentBulkImport:
 
     @pytest.fixture
     def section(self, organization, branch):
+        academic_year = AcademicYear.objects.get(
+            organization=organization,
+            branch=branch,
+            is_current=True,
+        )
         grade = GradeFactory(organization=organization, branch=branch, name="Grade 9")
         return SectionFactory(
             organization=organization,
             branch=branch,
             grade=grade,
             name="Section A",
+            academic_year=academic_year,
         )
 
     def test_parent_bulk_import_success(self, api_client, user, organization, branch):
@@ -292,6 +300,11 @@ class TestStudentAndParentBulkImport:
         assert alice.gender == "FEMALE"
         assert str(alice.date_of_birth) == "2015-05-20"
         assert alice.admission_date == date(2023, 9, 1)
+        assert StudentAcademicYearSection.objects.filter(
+            student=alice,
+            academic_year=section.academic_year,
+            section=section,
+        ).exists()
 
         bob = Student.objects.get(first_name="Bob", current_section=None)
         assert bob.last_name == "Brown"
@@ -299,6 +312,11 @@ class TestStudentAndParentBulkImport:
         assert str(bob.date_of_birth) == "2016-06-18"
         assert bob.admission_date == timezone.now().date()
         assert bob.roll_no.startswith("STU-")
+        assert StudentAcademicYearSection.objects.filter(
+            student=bob,
+            academic_year=section.academic_year,
+            section=None,
+        ).exists()
 
         # Verify parent links
         student_alice = Student.objects.get(roll_no="R501")

@@ -90,7 +90,12 @@ def scope_queryset_for_user(
     ).distinct()
 
 
-def scope_student_queryset_for_user(queryset: QuerySet, user: Any) -> QuerySet:
+def scope_student_queryset_for_user(
+    queryset: QuerySet,
+    user: Any,
+    *,
+    academic_year_id: str | None = None,
+) -> QuerySet:
     access_filter = user_resource_access_filter(user)
 
     if getattr(user, "is_authenticated", False):
@@ -98,6 +103,11 @@ def scope_student_queryset_for_user(queryset: QuerySet, user: Any) -> QuerySet:
             user,
             section_lookup="current_section",
         )
+        if academic_year_id is not None:
+            access_filter |= teacher_section_access_filter(
+                user,
+                section_lookup="academic_year_sections__section",
+            ) & Q(academic_year_sections__academic_year_id=academic_year_id)
 
     return queryset.filter(access_filter).distinct()
 
