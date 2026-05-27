@@ -43,6 +43,7 @@ def process_bulk_import(self, import_job_id):
         file_name=file_name,
         organization_id=import_job.organization_id,
         branch_id=import_job.branch_id,
+        current_section=import_job.current_section,
     )
 
     try:

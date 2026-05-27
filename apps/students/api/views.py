@@ -315,6 +315,7 @@ class StudentViewSet(viewsets.ModelViewSet):
         organization_id = serializer.validated_data["organization"]
         branch_id = serializer.validated_data["branch"]
         media_file = serializer.validated_data["file"]
+        current_section = serializer.validated_data.get("current_section")
 
         # Permission check
         try:
@@ -339,6 +340,7 @@ class StudentViewSet(viewsets.ModelViewSet):
             module="students",
             organization_id=organization_id,
             branch_id=branch_id,
+            current_section=current_section,
             created_by=request.user,
         )
 

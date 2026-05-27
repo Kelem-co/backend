@@ -66,6 +66,13 @@ class ImportJob(TimeStampedModel, UUIDModel):
         on_delete=models.CASCADE,
         related_name="import_jobs",
     )
+    current_section = models.ForeignKey(
+        "academics.Section",
+        on_delete=models.SET_NULL,
+        related_name="import_jobs",
+        null=True,
+        blank=True,
+    )
     errors = models.JSONField(_("Errors"), null=True, blank=True)
     progress = models.IntegerField(_("Progress"), default=0)
     created_by = models.ForeignKey(
