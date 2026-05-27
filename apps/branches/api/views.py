@@ -18,6 +18,7 @@ from drf_spectacular.utils import extend_schema
 from drf_spectacular.utils import extend_schema_view
 from rest_framework import status
 from rest_framework import viewsets
+from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -74,6 +75,17 @@ class BranchViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(school_id=school_id)
 
         return queryset
+
+    @action(detail=True, methods=["get"], url_path="school-name")
+    def school_name(self, request, **kwargs):
+        branch = self.get_object()
+        return Response(
+            {
+                "branch_id": str(branch.id),
+                "school_id": str(branch.school_id),
+                "school_name": branch.school.name,
+            },
+        )
 
 
 class BranchAdminViewSet(viewsets.ModelViewSet):

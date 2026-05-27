@@ -185,18 +185,15 @@ class TestStudentsAPI:
 
         assert response.status_code == status.HTTP_200_OK
         results = {item["id"]: item for item in response.data["results"]}
-        assert (
-            results[str(student_with_section.id)]["current_section"]
-            == str(section.id)
+        assert results[str(student_with_section.id)]["current_section"] == str(
+            section.id,
         )
-        assert (
-            results[str(student_with_section.id)]["academic_year_id"]
-            == str(section.academic_year_id)
+        assert results[str(student_with_section.id)]["academic_year_id"] == str(
+            section.academic_year_id,
         )
         assert results[str(student_without_section.id)]["current_section"] is None
-        assert (
-            results[str(student_without_section.id)]["academic_year_id"]
-            == str(section.academic_year_id)
+        assert results[str(student_without_section.id)]["academic_year_id"] == str(
+            section.academic_year_id,
         )
         assert results[str(student_without_section.id)]["section_name"] is None
 
