@@ -32,6 +32,7 @@ from teachers.models import TeacherSubjectAssignment
 
 from core.api.access import user_can_access_branch
 from core.api.access import user_resource_access_filter
+from core.api.bulk_import import build_bulk_import_template_response
 from core.models import ImportJob
 from core.tasks import process_bulk_import
 
@@ -200,6 +201,17 @@ class TeacherViewSet(viewsets.ModelViewSet):
         return Response(
             {"task_id": str(import_job.id), "detail": "Bulk import process started."},
             status=status.HTTP_202_ACCEPTED,
+        )
+
+    @extend_schema(
+        summary="Download Teacher Bulk Import Template",
+        responses={(200, "text/csv"): OpenApiTypes.BINARY},
+    )
+    @action(detail=False, methods=["get"], url_path="bulk-import-template")
+    def bulk_import_template(self, request):
+        return build_bulk_import_template_response(
+            template_name="bulk_import/teachers_bulk_import_template.csv",
+            filename="teachers_bulk_import_template.csv",
         )
 
     # ------------------------------------------------------------------
