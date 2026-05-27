@@ -16,6 +16,8 @@ def _default_error_code(status_code: int) -> str:
         return "permission_denied"
     if status_code == HTTPStatus.NOT_FOUND:
         return "not_found"
+    if status_code == HTTPStatus.TOO_MANY_REQUESTS:
+        return "throttled"
     return "error"
 
 

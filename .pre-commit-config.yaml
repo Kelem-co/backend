@@ -29,7 +29,7 @@ repos:
 
   # Run the Ruff linter.
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.12
+    rev: v0.15.14
     hooks:
       # Linter
       - id: ruff-check
@@ -38,7 +38,7 @@ repos:
       - id: ruff-format
 
   - repo: https://github.com/tox-dev/pyproject-fmt
-    rev: v2.21.1
+    rev: v2.21.2
     hooks:
       - id: pyproject-fmt
 
@@ -47,6 +47,28 @@ repos:
     hooks:
       - id: djlint-reformat-django
       - id: djlint-django
+
+  - repo: https://github.com/bridgecrewio/checkov.git
+    rev: 3.2.529
+    hooks:
+      - id: checkov
+        args:
+          - --config-file
+          - .checkov.yaml
+
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: v1.105.0
+    hooks:
+      - id: terraform_fmt
+      - id: terraform_validate
+        args:
+        - --hook-config=--retry-once-with-cleanup=true
+      - id: terraform_docs
+        args:
+          - --args=--config=.terraform-docs.yaml
+      - id: terraform_tflint
+        args:
+          - --args=--config=__GIT_WORKING_DIR__/.tflint.hcl
 
 # sets up .pre-commit-ci.yaml to ensure pre-commit dependencies stay up to date
 ci:

@@ -14,6 +14,9 @@ on:
     branches: ["main", "develop"]
     paths-ignore: ["docs/**"]
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
@@ -29,13 +32,25 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version-file: ".python-version"
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Set up TFLint
+        uses: terraform-linters/setup-tflint@v6
+
       # Consider using pre-commit.ci for open source project
       - name: Run pre-commit
+        env:
+          SKIP: terraform_docs
         uses: pre-commit/action@v3.0.1
 
   # With no caching at all the entire ci process takes 3m to complete!
   pytest:
     runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
     env:
       S3_PORT: 9000
       S3_CONSOLE_PORT: 9001
