@@ -1,4 +1,5 @@
 from academics.api.views import AcademicYearViewSet
+from academics.api.views import CalendarDocumentCurrentView
 from academics.api.views import GradeSubjectViewSet
 from academics.api.views import GradeViewSet
 from academics.api.views import SectionViewSet
@@ -94,6 +95,11 @@ router.register("announcements", AnnouncementViewSet, basename="announcement")
 
 app_name = "api"
 urlpatterns = [
+    path(
+        "calendar-documents/current/",
+        CalendarDocumentCurrentView.as_view(),
+        name="calendar-document-current",
+    ),
     path(
         "branch-admins/invite/",
         BranchAdminInviteView.as_view(),

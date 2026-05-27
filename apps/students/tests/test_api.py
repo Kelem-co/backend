@@ -12,6 +12,7 @@ from rest_framework.test import APIClient
 from rest_framework.test import APIRequestFactory
 from students.api.views import ParentViewSet
 from students.api.views import StudentViewSet
+from students.models import Parent
 from students.models import Student
 from students.models import StudentAcademicYearSection
 from students.tests.factories import ParentFactory
@@ -381,6 +382,8 @@ class TestStudentsAPI:
         response = api_client.post("/api/parents/", create_payload, format="json")
         assert response.status_code == status.HTTP_201_CREATED
         parent_id = response.data["id"]
+        assert response.data["organization_ids"] == [str(organization.id)]
+        assert response.data["branch_ids"] == [str(branch.id)]
 
         student = StudentFactory(
             organization=organization,
@@ -402,6 +405,11 @@ class TestStudentsAPI:
         response = api_client.get("/api/parents/")
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data["results"]) >= 1
+        created_parent = next(
+            item for item in response.data["results"] if item["id"] == parent_id
+        )
+        assert created_parent["organization_ids"] == [str(organization.id)]
+        assert created_parent["branch_ids"] == [str(branch.id)]
 
         response = api_client.get(
             f"/api/parents/?branch={branch.id}&organization={organization.id}",
@@ -412,6 +420,8 @@ class TestStudentsAPI:
         response = api_client.get(f"/api/parents/{parent_id}/")
         assert response.status_code == status.HTTP_200_OK
         assert response.data["user_details"]["email"] == parent_user.email
+        assert response.data["organization_ids"] == [str(organization.id)]
+        assert response.data["branch_ids"] == [str(branch.id)]
 
         response = api_client.patch(
             f"/api/parents/{parent_id}/",
@@ -443,6 +453,110 @@ class TestStudentsAPI:
         assert response.status_code == status.HTTP_200_OK
         assert response.data[0]["id"] == str(student.id)
 
+    def test_parent_create_accepts_alias_membership_fields(
+        self,
+        api_client,
+        user,
+        organization,
+        branch,
+    ):
+        api_client.force_authenticate(user=user)
+        parent_user = UserFactory()
+
+        response = api_client.post(
+            "/api/parents/",
+            {
+                "user": str(parent_user.id),
+                "organization_ids": [str(organization.id)],
+                "branch_ids": [str(branch.id)],
+                "secondary_phone_number": "+251911000011",
+                "occupation": "Engineer",
+                "work_address": "HQ Building",
+                "relationship_notes": "Evening pickup",
+                "emergency_contact_name": "Aster",
+                "emergency_contact_phone": "+251911000012",
+                "is_active": True,
+            },
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        parent = Parent.objects.get(id=response.data["id"])
+        assert list(parent.organizations.values_list("id", flat=True)) == [
+            organization.id,
+        ]
+        assert list(parent.branches.values_list("id", flat=True)) == [branch.id]
+        assert response.data["organization_ids"] == [str(organization.id)]
+        assert response.data["branch_ids"] == [str(branch.id)]
+
+    def test_parent_patch_accepts_mixed_membership_field_names(
+        self,
+        api_client,
+        user,
+        organization,
+        branch,
+    ):
+        api_client.force_authenticate(user=user)
+        second_organization = OrganizationFactory(owner=user)
+        second_branch = BranchFactory(school__organization=second_organization)
+        parent = ParentFactory(
+            organizations=[organization],
+            branches=[branch],
+        )
+
+        response = api_client.patch(
+            f"/api/parents/{parent.id}/",
+            {
+                "organizations": [str(organization.id), str(second_organization.id)],
+                "branch_ids": [str(branch.id), str(second_branch.id)],
+            },
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        parent.refresh_from_db()
+        assert set(parent.organizations.values_list("id", flat=True)) == {
+            organization.id,
+            second_organization.id,
+        }
+        assert set(parent.branches.values_list("id", flat=True)) == {
+            branch.id,
+            second_branch.id,
+        }
+        assert set(response.data["organization_ids"]) == {
+            str(organization.id),
+            str(second_organization.id),
+        }
+        assert set(response.data["branch_ids"]) == {
+            str(branch.id),
+            str(second_branch.id),
+        }
+
+    def test_parent_create_rejects_branch_outside_selected_organizations(
+        self,
+        api_client,
+        user,
+        organization,
+        branch,
+    ):
+        api_client.force_authenticate(user=user)
+        foreign_branch = BranchFactory()
+        parent_user = UserFactory()
+
+        response = api_client.post(
+            "/api/parents/",
+            {
+                "user": str(parent_user.id),
+                "organization_ids": [str(organization.id)],
+                "branch_ids": [str(branch.id), str(foreign_branch.id)],
+                "is_active": True,
+            },
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data["errors"][0]["field"] == "branches"
+
     def test_parent_link_crud(self, api_client, user, organization, branch, section):
         api_client.force_authenticate(user=user)
         student = StudentFactory(
@@ -466,6 +580,12 @@ class TestStudentsAPI:
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data["results"]) >= 1
         assert response.data["results"][0]["parent_details"]["id"] == str(parent.id)
+        assert response.data["results"][0]["parent_details"]["organization_ids"] == [
+            str(organization.id),
+        ]
+        assert response.data["results"][0]["parent_details"]["branch_ids"] == [
+            str(branch.id),
+        ]
 
         response = api_client.delete(f"/api/parent-links/{link_id}/")
         assert response.status_code == status.HTTP_204_NO_CONTENT

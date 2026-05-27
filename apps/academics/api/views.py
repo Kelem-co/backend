@@ -1,14 +1,28 @@
 from academics.models import AcademicYear
+from academics.models import CalendarDocument
 from academics.models import Grade
 from academics.models import GradeSubject
 from academics.models import Section
 from academics.models import Subject
+from django.db import transaction
+from django.http import Http404
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter
+from drf_spectacular.utils import extend_schema
 from rest_framework import viewsets
 from rest_framework.filters import SearchFilter
+from rest_framework.generics import get_object_or_404
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from core.api.access import scope_queryset_for_user
+from core.api.access import user_can_access_branch
 
 from .serializers import AcademicYearSerializer
+from .serializers import CalendarDocumentCurrentQuerySerializer
+from .serializers import CalendarDocumentSerializer
+from .serializers import CalendarDocumentUpsertSerializer
 from .serializers import GradeSerializer
 from .serializers import GradeSubjectReadSerializer
 from .serializers import GradeSubjectSerializer
@@ -108,3 +122,105 @@ class GradeSubjectViewSet(viewsets.ModelViewSet):
         if self.action in ["list", "retrieve"]:
             return GradeSubjectReadSerializer
         return GradeSubjectSerializer
+
+
+CALENDAR_DOCUMENT_PARAMETERS = [
+    OpenApiParameter(
+        name="branch",
+        type=OpenApiTypes.UUID,
+        location=OpenApiParameter.QUERY,
+        required=True,
+        description="Branch id for the current calendar document.",
+    ),
+    OpenApiParameter(
+        name="organization",
+        type=OpenApiTypes.UUID,
+        location=OpenApiParameter.QUERY,
+        required=True,
+        description="Organization id for the current calendar document.",
+    ),
+    OpenApiParameter(
+        name="academic_year",
+        type=OpenApiTypes.UUID,
+        location=OpenApiParameter.QUERY,
+        required=False,
+        description="Optional academic year id for the current calendar document.",
+    ),
+]
+
+
+class CalendarDocumentCurrentView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def _build_queryset(self):
+        return scope_queryset_for_user(
+            CalendarDocument.objects.select_related(
+                "organization",
+                "branch",
+                "academic_year",
+                "media_file",
+            ),
+            self.request.user,
+        )
+
+    @extend_schema(
+        parameters=CALENDAR_DOCUMENT_PARAMETERS,
+        responses={200: CalendarDocumentSerializer},
+    )
+    def get(self, request):
+        serializer = CalendarDocumentCurrentQuerySerializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+
+        branch = serializer.validated_data["branch"]
+        organization = serializer.validated_data["organization"]
+        academic_year = serializer.validated_data.get("academic_year")
+
+        queryset = self._build_queryset()
+        filters = {
+            "branch": branch,
+            "organization": organization,
+        }
+        if academic_year is not None:
+            filters["academic_year"] = academic_year
+        else:
+            filters["academic_year__isnull"] = True
+
+        document = get_object_or_404(queryset, **filters)
+        return Response(CalendarDocumentSerializer(document).data)
+
+    @extend_schema(
+        request=CalendarDocumentUpsertSerializer,
+        responses={200: CalendarDocumentSerializer, 201: CalendarDocumentSerializer},
+    )
+    def post(self, request):
+        serializer = CalendarDocumentUpsertSerializer(
+            data=request.data,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+
+        branch = serializer.validated_data["branch"]
+        if not user_can_access_branch(request.user, branch):
+            raise Http404
+
+        academic_year = serializer.validated_data.get("academic_year")
+        filters = {
+            "organization": serializer.validated_data["organization"],
+            "branch": branch,
+            "academic_year": academic_year,
+        }
+
+        with transaction.atomic():
+            document, created = (
+                CalendarDocument.objects.select_for_update().get_or_create(
+                    **filters,
+                    defaults={"media_file": serializer.validated_data["media_file"]},
+                )
+            )
+            if not created:
+                document.media_file = serializer.validated_data["media_file"]
+                document.save(update_fields=["media_file", "updated_at"])
+
+        response_serializer = CalendarDocumentSerializer(document)
+        response_status = 201 if created else 200
+        return Response(response_serializer.data, status=response_status)

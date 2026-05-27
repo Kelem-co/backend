@@ -1,11 +1,14 @@
 import factory
 from academics.models import AcademicYear
+from academics.models import CalendarDocument
 from academics.models import Grade
 from academics.models import Section
 from academics.models import Subject
 from branches.tests.factories import BranchFactory
 from factory.django import DjangoModelFactory
 from organizations.tests.factories import OrganizationFactory
+
+from media.tests.factories import MediaFileFactory
 
 
 class AcademicYearFactory(DjangoModelFactory):
@@ -49,3 +52,16 @@ class SubjectFactory(DjangoModelFactory):
 
     class Meta:
         model = Subject
+
+
+class CalendarDocumentFactory(DjangoModelFactory):
+    organization = factory.SubFactory(OrganizationFactory)
+    branch = factory.SubFactory(
+        BranchFactory,
+        school__organization=factory.SelfAttribute("..organization"),
+    )
+    academic_year = None
+    media_file = factory.SubFactory(MediaFileFactory)
+
+    class Meta:
+        model = CalendarDocument
