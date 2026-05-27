@@ -23,6 +23,7 @@ from core.models import ImportJob
 from media.tests.factories import MediaFileFactory
 
 IMPORTED_STUDENT_COUNT = 2
+CURRENT_SECTION_ORG_ERROR = "Current section must belong to the selected organization."
 
 
 def create_csv_media(*, user, file_name: str, content: bytes):
@@ -455,10 +456,13 @@ class TestStudentAndParentBulkImport:
             == IMPORTED_STUDENT_COUNT
         )
         assert Student.objects.filter(current_section=section).count() == 0
-        assert StudentAcademicYearSection.objects.filter(
-            academic_year=other_section.academic_year,
-            section=other_section,
-        ).count() == IMPORTED_STUDENT_COUNT
+        assert (
+            StudentAcademicYearSection.objects.filter(
+                academic_year=other_section.academic_year,
+                section=other_section,
+            ).count()
+            == IMPORTED_STUDENT_COUNT
+        )
 
     def test_student_bulk_import_rejects_request_current_section_from_other_branch(
         self,
@@ -563,10 +567,7 @@ class TestStudentAndParentBulkImport:
             "errors": [
                 {
                     "code": "invalid",
-                    "detail": (
-                        "Current section must belong to the selected "
-                        "organization."
-                    ),
+                    "detail": CURRENT_SECTION_ORG_ERROR,
                     "field": "current_section",
                 },
             ],
