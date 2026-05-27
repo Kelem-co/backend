@@ -3,6 +3,7 @@ import uuid
 from typing import Any
 
 import pandas as pd
+from academics.models import AcademicYear
 from academics.models import Section
 from accounts.models import User
 from branches.models import Branch
@@ -15,6 +16,7 @@ from organizations.models import Organization
 from students.models import Parent
 from students.models import ParentStudentLink
 from students.models import Student
+from students.models import StudentAcademicYearSection
 
 FILE_PARSE_EXCEPTIONS = (
     pd.errors.EmptyDataError,
@@ -360,6 +362,11 @@ class StudentBulkImportService(_BulkImportServiceBase):
     ) -> list[dict[str, Any]]:
         prepared_rows: list[dict[str, Any]] = []
         seen_roll_numbers: set[tuple[int | None, str]] = set()
+        current_academic_year = AcademicYear.objects.filter(
+            branch=branch,
+            organization_id=self.organization_id,
+            is_current=True,
+        ).first()
 
         for index, row in dataframe.iterrows():
             row_number = index + 2
@@ -367,6 +374,7 @@ class StudentBulkImportService(_BulkImportServiceBase):
             prepared_row = self._build_row_payload(
                 row=row,
                 branch=branch,
+                current_academic_year=current_academic_year,
                 row_errors=row_errors,
                 seen_roll_numbers=seen_roll_numbers,
             )
@@ -388,6 +396,7 @@ class StudentBulkImportService(_BulkImportServiceBase):
         *,
         row: pd.Series,
         branch: Branch,
+        current_academic_year: AcademicYear | None,
         row_errors: dict[str, list[str]],
         seen_roll_numbers: set[tuple[int | None, str]],
     ) -> dict[str, Any]:
@@ -414,6 +423,11 @@ class StudentBulkImportService(_BulkImportServiceBase):
             grade_name=grade_name,
             row_errors=row_errors,
         )
+        academic_year = self._resolve_academic_year(
+            section=section,
+            current_academic_year=current_academic_year,
+            row_errors=row_errors,
+        )
         self._validate_roll_number(
             roll_no=roll_no,
             section=section,
@@ -432,6 +446,7 @@ class StudentBulkImportService(_BulkImportServiceBase):
             "gender": gender,
             "date_of_birth": date_of_birth,
             "roll_no": roll_no,
+            "academic_year": academic_year,
             "current_section": section,
             "admission_date": admission_date,
             "parent_links": parent_links,
@@ -515,6 +530,29 @@ class StudentBulkImportService(_BulkImportServiceBase):
             return None
 
         return sections.first()
+
+    @staticmethod
+    def _resolve_academic_year(
+        *,
+        section: Section | None,
+        current_academic_year: AcademicYear | None,
+        row_errors: dict[str, list[str]],
+    ) -> AcademicYear | None:
+        if section is not None:
+            if section.academic_year is None:
+                row_errors["section_name"] = [
+                    "Selected section must belong to an academic year.",
+                ]
+                return None
+            return section.academic_year
+
+        if current_academic_year is None:
+            row_errors["academic_year"] = [
+                "Current academic year not found for the selected branch.",
+            ]
+            return None
+
+        return current_academic_year
 
     def _validate_roll_number(
         self,
@@ -659,9 +697,20 @@ class StudentBulkImportService(_BulkImportServiceBase):
                         gender=row_data["gender"],
                         date_of_birth=row_data["date_of_birth"],
                         roll_no=row_data["roll_no"],
-                        current_section=row_data["current_section"],
+                        current_section=(
+                            row_data["current_section"]
+                            if row_data["academic_year"].is_current
+                            else None
+                        ),
                         admission_date=row_data["admission_date"],
                     )
+                    assignment = StudentAcademicYearSection(
+                        student=student,
+                        academic_year=row_data["academic_year"],
+                        section=row_data["current_section"],
+                    )
+                    assignment.full_clean()
+                    assignment.save()
                     self._create_parent_links(student, row_data["parent_links"])
         except DatabaseError as exc:
             self.errors.append(self._error(0, "server", f"Internal error: {exc!s}"))
