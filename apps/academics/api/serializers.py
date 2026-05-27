@@ -39,8 +39,7 @@ def validate_calendar_document_scope(attrs):
             raise serializers.ValidationError(
                 {
                     "academic_year": (
-                        "Selected academic year does not belong to the selected "
-                        "branch."
+                        "Selected academic year does not belong to the selected branch."
                     ),
                 },
             )

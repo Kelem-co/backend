@@ -207,5 +207,7 @@ class CalendarDocument(UUIDModel, TimeStampedModel):
         ]
 
     def __str__(self):
-        academic_year_name = self.academic_year.name if self.academic_year else "no year"
+        academic_year_name = (
+            self.academic_year.name if self.academic_year else "no year"
+        )
         return f"{self.branch.name} - {academic_year_name}"
