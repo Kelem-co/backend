@@ -181,6 +181,34 @@ PARENT_BY_ORGANIZATION_PARAMETERS = [
     ),
 ]
 
+PARENT_LINK_LIST_PARAMETERS = [
+    OpenApiParameter(
+        name="student",
+        type=OpenApiTypes.UUID,
+        location=OpenApiParameter.QUERY,
+        description="Filter by student id.",
+    ),
+    OpenApiParameter(
+        name="parent",
+        type=OpenApiTypes.UUID,
+        location=OpenApiParameter.QUERY,
+        description="Filter by parent id.",
+    ),
+    OpenApiParameter(
+        name="relationship_type",
+        type=OpenApiTypes.STR,
+        location=OpenApiParameter.QUERY,
+        enum=[choice for choice, _label in ParentStudentLink.Relationship.choices],
+        description="Filter by relationship type.",
+    ),
+    OpenApiParameter(
+        name="is_primary_contact",
+        type=OpenApiTypes.BOOL,
+        location=OpenApiParameter.QUERY,
+        description="Filter by primary contact flag.",
+    ),
+]
+
 
 @extend_schema_view(
     list=extend_schema(parameters=STUDENT_LIST_PARAMETERS),
@@ -645,6 +673,9 @@ class ParentViewSet(viewsets.ModelViewSet):
         return Response(StudentReadSerializer(students, many=True).data)
 
 
+@extend_schema_view(
+    list=extend_schema(parameters=PARENT_LINK_LIST_PARAMETERS),
+)
 class ParentStudentLinkViewSet(viewsets.ModelViewSet):
     """
     CRUD for parent-student relationships.
@@ -670,12 +701,30 @@ class ParentStudentLinkViewSet(viewsets.ModelViewSet):
         if getattr(self, "swagger_fake_view", False):
             return self.queryset.none()
 
-        return scope_queryset_for_user(
+        qs = scope_queryset_for_user(
             self.queryset,
             self.request.user,
             organization_lookup="parent__organizations",
             branch_lookup="parent__branches",
         )
+        params = self.request.query_params
+        if params.get("student"):
+            qs = qs.filter(student_id=params["student"])
+        if params.get("parent"):
+            qs = qs.filter(parent_id=params["parent"])
+        if params.get("relationship_type"):
+            qs = qs.filter(
+                relationship_type=params["relationship_type"].upper(),
+            )
+        if params.get("is_primary_contact") is not None:
+            is_primary_contact = params["is_primary_contact"].lower() in (
+                "true",
+                "1",
+                "yes",
+            )
+            qs = qs.filter(is_primary_contact=is_primary_contact)
+
+        return qs.distinct()
 
     def get_serializer_class(self):
         if self.action in ["list", "retrieve"]:

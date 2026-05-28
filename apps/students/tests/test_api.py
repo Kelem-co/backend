@@ -590,6 +590,57 @@ class TestStudentsAPI:
         response = api_client.delete(f"/api/parent-links/{link_id}/")
         assert response.status_code == status.HTTP_204_NO_CONTENT
 
+    def test_parent_link_list_filters(
+        self,
+        api_client,
+        user,
+        organization,
+        branch,
+        section,
+    ):
+        api_client.force_authenticate(user=user)
+        student_one = StudentFactory(
+            organization=organization,
+            branch=branch,
+            current_section=section,
+        )
+        student_two = StudentFactory(
+            organization=organization,
+            branch=branch,
+            current_section=section,
+        )
+        parent_one = ParentFactory(organizations=[organization], branches=[branch])
+        parent_two = ParentFactory(organizations=[organization], branches=[branch])
+
+        link_one = ParentStudentLinkFactory(
+            student=student_one,
+            parent=parent_one,
+            relationship_type="FATHER",
+            is_primary_contact=True,
+        )
+        link_two = ParentStudentLinkFactory(
+            student=student_two,
+            parent=parent_two,
+            relationship_type="MOTHER",
+            is_primary_contact=False,
+        )
+
+        response = api_client.get(f"/api/parent-links/?student={student_one.id}")
+        assert response.status_code == status.HTTP_200_OK
+        assert [item["id"] for item in response.data["results"]] == [str(link_one.id)]
+
+        response = api_client.get(f"/api/parent-links/?parent={parent_two.id}")
+        assert response.status_code == status.HTTP_200_OK
+        assert [item["id"] for item in response.data["results"]] == [str(link_two.id)]
+
+        response = api_client.get("/api/parent-links/?relationship_type=mother")
+        assert response.status_code == status.HTTP_200_OK
+        assert [item["id"] for item in response.data["results"]] == [str(link_two.id)]
+
+        response = api_client.get("/api/parent-links/?is_primary_contact=true")
+        assert response.status_code == status.HTTP_200_OK
+        assert [item["id"] for item in response.data["results"]] == [str(link_one.id)]
+
     def test_student_queryset_includes_branch_admin_branch(self, user):
         organization = OrganizationFactory()
         branch = BranchFactory(school__organization=organization)
