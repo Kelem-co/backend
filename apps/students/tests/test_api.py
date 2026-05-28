@@ -591,7 +591,12 @@ class TestStudentsAPI:
         assert response.status_code == status.HTTP_204_NO_CONTENT
 
     def test_parent_link_list_filters(
-        self, api_client, user, organization, branch, section
+        self,
+        api_client,
+        user,
+        organization,
+        branch,
+        section,
     ):
         api_client.force_authenticate(user=user)
         student_one = StudentFactory(
