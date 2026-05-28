@@ -8,6 +8,8 @@ from academics.tests.factories import SubjectFactory
 from accounts.tests.factories import UserFactory
 from attendance.models import Attendance
 from attendance.tests.factories import AttendanceFactory
+from attendance.tests.factories import AttendanceSummaryFactory
+from branches.models import BranchAdmin
 from branches.tests.factories import BranchFactory
 from organizations.tests.factories import OrganizationFactory
 from rest_framework import status
@@ -322,6 +324,81 @@ class TestAttendanceTeacherAccessAPI:
 
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["created"] == 1
+
+    def test_assigned_teacher_can_list_attendance_summaries_for_own_section(
+        self,
+        api_client,
+        assigned_teacher,
+        organization,
+        student,
+        academic_year,
+    ):
+        summary = AttendanceSummaryFactory(
+            organization=organization,
+            student=student,
+            academic_year=academic_year,
+            total_present=5,
+            total_school_days=6,
+        )
+        api_client.force_authenticate(user=assigned_teacher.user)
+
+        response = api_client.get("/api/attendance-summaries/")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["count"] == 1
+        assert response.data["results"][0]["id"] == str(summary.id)
+
+    def test_teacher_cannot_list_attendance_summaries_for_unassigned_section(
+        self,
+        api_client,
+        assigned_teacher,
+        organization,
+        other_student,
+        academic_year,
+    ):
+        AttendanceSummaryFactory(
+            organization=organization,
+            student=other_student,
+            academic_year=academic_year,
+            total_present=2,
+            total_school_days=4,
+        )
+        api_client.force_authenticate(user=assigned_teacher.user)
+
+        response = api_client.get("/api/attendance-summaries/")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["count"] == 0
+
+    def test_branch_admin_can_list_attendance_summaries(
+        self,
+        api_client,
+        branch,
+        organization,
+        student,
+        academic_year,
+    ):
+        summary = AttendanceSummaryFactory(
+            organization=organization,
+            student=student,
+            academic_year=academic_year,
+            total_present=7,
+            total_school_days=8,
+        )
+        branch_admin_user = UserFactory(role="ADMIN", name="Branch Admin")
+        BranchAdmin.objects.create(
+            organization=organization,
+            user=branch_admin_user,
+            branch=branch,
+            status=BranchAdmin.Status.ACTIVE,
+        )
+        api_client.force_authenticate(user=branch_admin_user)
+
+        response = api_client.get("/api/attendance-summaries/")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["count"] == 1
+        assert response.data["results"][0]["id"] == str(summary.id)
 
     def test_assigned_non_homeroom_teacher_cannot_update_or_delete_attendance(
         self,
