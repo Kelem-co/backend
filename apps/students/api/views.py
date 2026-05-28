@@ -27,7 +27,8 @@ from students.models import ParentStudentLink
 from students.models import Student
 from students.models import StudentAcademicYearSection
 
-from core.api.access import scope_queryset_for_user
+from core.api.access import scope_parent_link_queryset_for_user
+from core.api.access import scope_parent_queryset_for_user
 from core.api.access import scope_student_queryset_for_user
 from core.api.access import user_can_access_branch
 from core.api.access import user_can_access_parent
@@ -484,12 +485,7 @@ class ParentViewSet(viewsets.ModelViewSet):
         if getattr(self, "swagger_fake_view", False):
             return qs.none()
 
-        qs = scope_queryset_for_user(
-            qs,
-            self.request.user,
-            organization_lookup="organizations",
-            branch_lookup="branches",
-        )
+        qs = scope_parent_queryset_for_user(qs, self.request.user)
         params = self.request.query_params
         if params.get("organization"):
             qs = qs.filter(organizations__id=params["organization"])
@@ -701,12 +697,7 @@ class ParentStudentLinkViewSet(viewsets.ModelViewSet):
         if getattr(self, "swagger_fake_view", False):
             return self.queryset.none()
 
-        qs = scope_queryset_for_user(
-            self.queryset,
-            self.request.user,
-            organization_lookup="parent__organizations",
-            branch_lookup="parent__branches",
-        )
+        qs = scope_parent_link_queryset_for_user(self.queryset, self.request.user)
         params = self.request.query_params
         if params.get("student"):
             qs = qs.filter(student_id=params["student"])
