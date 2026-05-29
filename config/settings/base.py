@@ -74,6 +74,7 @@ DJANGO_APPS = [
     "django.forms",
 ]
 THIRD_PARTY_APPS = [
+    "channels",
     "crispy_forms",
     "crispy_bootstrap5",
     "allauth",
@@ -104,10 +105,13 @@ LOCAL_APPS = [
     "announcements",
     "core",
     "media",
+    "messaging",
     # Your stuff: custom apps go here
 ]
 # https://docs.djangoproject.com/en/dev/ref/settings/#installed-apps
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
+
+ASGI_APPLICATION = "config.asgi.application"
 
 # MIGRATIONS
 # ------------------------------------------------------------------------------
@@ -325,6 +329,15 @@ LOGGING = {
 
 REDIS_URL = env("REDIS_URL", default="redis://redis:6379/0")
 REDIS_SSL = REDIS_URL.startswith("rediss://")
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [REDIS_URL],
+        },
+    },
+}
 
 # Celery
 # ------------------------------------------------------------------------------

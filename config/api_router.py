@@ -19,6 +19,7 @@ from branches.api.views import BranchViewSet
 from django.conf import settings
 from django.urls import include
 from django.urls import path
+from messaging.api.urls import urlpatterns as messaging_urlpatterns
 from organizations.api.views import OrganizationViewSet
 from rest_framework.routers import DefaultRouter
 from rest_framework.routers import SimpleRouter
@@ -137,4 +138,5 @@ urlpatterns = [
     ),
     *router.urls,
     path("", include("media.api.urls")),
+    *messaging_urlpatterns,
 ]
