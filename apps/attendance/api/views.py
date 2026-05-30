@@ -27,6 +27,7 @@ from .serializers import AttendanceReasonSerializer
 from .serializers import AttendanceSerializer
 from .serializers import AttendanceSummarySerializer
 from .serializers import BulkAttendanceSerializer
+from .serializers import ParentReasonCreateSerializer
 from .serializers import ParentReasonUpdateSerializer
 
 # ---------------------------------------------------------------------------
@@ -349,6 +350,10 @@ class AttendanceReasonViewSet(viewsets.ModelViewSet):
       PATCH /attendance-reasons/<id>/parent-update/
           Restricted to the fields a parent is allowed to change:
           reason_category, note, parent_confirmed.
+
+    Parent-specific create endpoint:
+      POST /attendance-reasons/parent-create/
+          Creates or updates the linked reason for one attendance record.
     """
 
     lookup_field = "id"
@@ -404,9 +409,32 @@ class AttendanceReasonViewSet(viewsets.ModelViewSet):
     def get_serializer_class(self):
         if self.action in ["list", "retrieve"]:
             return AttendanceReasonReadSerializer
+        if self.action == "parent_create":
+            return ParentReasonCreateSerializer
         if self.action == "parent_update":
             return ParentReasonUpdateSerializer
         return AttendanceReasonSerializer
+
+    @action(detail=False, methods=["post"], url_path="parent-create")
+    def parent_create(self, request):
+        serializer = ParentReasonCreateSerializer(
+            data=request.data,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        attendance = serializer.validated_data["attendance"]
+        if not user_can_access_student_as_parent_or_staff(
+            request.user,
+            attendance.student,
+        ):
+            message = "You cannot create a reason for this attendance record."
+            raise PermissionDenied(message)
+
+        reason = serializer.save()
+        return Response(
+            AttendanceReasonReadSerializer(reason, context={"request": request}).data,
+            status=status.HTTP_200_OK,
+        )
 
     # ------------------------------------------------------------------
     # PATCH /attendance-reasons/<id>/parent-update/

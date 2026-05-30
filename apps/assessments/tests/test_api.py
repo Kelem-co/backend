@@ -425,10 +425,13 @@ class TestAssessmentResultsTeacherAccessAPI:
         assert list_response.status_code == status.HTTP_200_OK
         assert list_response.data["count"] == 1
         assert list_response.data["results"][0]["id"] == str(result.id)
+        assert list_response.data["results"][0]["task_type"] == Assessment.TaskType.QUIZ
+        assert list_response.data["results"][0]["task_type_display"] == "Quiz"
         assert by_assessment_response.status_code == status.HTTP_200_OK
         assert by_assessment_response.data[0]["id"] == str(result.id)
         assert by_student_response.status_code == status.HTTP_200_OK
         assert by_student_response.data[0]["id"] == str(result.id)
+        assert by_student_response.data[0]["task_type"] == Assessment.TaskType.QUIZ
 
     def test_assigned_teacher_can_create_and_bulk_grade_own_results(
         self,

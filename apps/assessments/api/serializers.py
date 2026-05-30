@@ -164,6 +164,11 @@ class AssessmentResultReadSerializer(AssessmentResultSerializer):
         read_only=True,
     )
     assessment_title = serializers.CharField(source="assessment.title", read_only=True)
+    task_type = serializers.CharField(source="assessment.task_type", read_only=True)
+    task_type_display = serializers.CharField(
+        source="assessment.get_task_type_display",
+        read_only=True,
+    )
     total_marks = serializers.DecimalField(
         source="assessment.total_marks",
         max_digits=6,
@@ -214,6 +219,8 @@ class AssessmentResultReadSerializer(AssessmentResultSerializer):
             "section_name",
             "subject_name",
             "assessment_title",
+            "task_type",
+            "task_type_display",
             "assessment_description",
             "assessment_due_date",
             "student_id",
