@@ -551,6 +551,7 @@ class ParentInviteSerializer(serializers.Serializer):
     father_name = serializers.CharField(max_length=255)
     grandfather_name = serializers.CharField(max_length=255)
     phone_number = serializers.CharField(max_length=20)
+    email = serializers.EmailField(required=False, allow_blank=True, default="")
     branch = serializers.PrimaryKeyRelatedField(queryset=Branch.objects.all())
     secondary_phone_number = serializers.CharField(
         max_length=20,
@@ -590,6 +591,40 @@ class ParentInviteSerializer(serializers.Serializer):
 
     PHONE_VALIDATION_ERROR_MESSAGE = "A parent with this phone number already exists."
 
+    @staticmethod
+    def _normalize_optional_phone(attrs: dict, field_name: str) -> None:
+        value = attrs.get(field_name, "")
+        if not value:
+            return
+        try:
+            attrs[field_name] = normalize_phone_number(value)
+        except ValueError as err:
+            raise ValidationError({field_name: str(err)}) from err
+
+    def _validate_existing_user(self, attrs: dict) -> User | None:
+        existing_user = User.objects.filter(phone_number=attrs["phone_number"]).first()
+        if existing_user is None:
+            return None
+
+        if existing_user.role != User.Role.PARENT or existing_user.is_active:
+            raise ValidationError({"phone_number": self.PHONE_VALIDATION_ERROR_MESSAGE})
+        if not Parent.objects.filter(user=existing_user).exists():
+            raise ValidationError({"phone_number": self.PHONE_VALIDATION_ERROR_MESSAGE})
+        attrs["existing_user"] = existing_user
+        return existing_user
+
+    @staticmethod
+    def _validate_email_conflict(email: str, existing_user: User | None) -> None:
+        if not email:
+            return
+        email_conflict = User.objects.filter(email__iexact=email)
+        if existing_user is not None:
+            email_conflict = email_conflict.exclude(pk=existing_user.pk)
+        if email_conflict.exists():
+            raise ValidationError(
+                {"email": "A user with this email already exists."},
+            )
+
     def validate(self, attrs):
         request = self.context.get("request")
         branch = attrs["branch"]
@@ -599,35 +634,13 @@ class ParentInviteSerializer(serializers.Serializer):
         except ValueError as err:
             raise ValidationError({"phone_number": str(err)}) from err
 
-        secondary_phone = attrs.get("secondary_phone_number", "")
-        if secondary_phone:
-            try:
-                attrs["secondary_phone_number"] = normalize_phone_number(
-                    secondary_phone,
-                )
-            except ValueError as err:
-                raise ValidationError({"secondary_phone_number": str(err)}) from err
+        self._normalize_optional_phone(attrs, "secondary_phone_number")
+        self._normalize_optional_phone(attrs, "emergency_contact_phone")
+        existing_user = self._validate_existing_user(attrs)
 
-        emergency_phone = attrs.get("emergency_contact_phone", "")
-        if emergency_phone:
-            try:
-                attrs["emergency_contact_phone"] = normalize_phone_number(
-                    emergency_phone,
-                )
-            except ValueError as err:
-                raise ValidationError({"emergency_contact_phone": str(err)}) from err
-
-        existing_user = User.objects.filter(phone_number=attrs["phone_number"]).first()
-        if existing_user is not None:
-            if existing_user.role != User.Role.PARENT or existing_user.is_active:
-                raise ValidationError(
-                    {"phone_number": self.PHONE_VALIDATION_ERROR_MESSAGE},
-                )
-            if not Parent.objects.filter(user=existing_user).exists():
-                raise ValidationError(
-                    {"phone_number": self.PHONE_VALIDATION_ERROR_MESSAGE},
-                )
-            attrs["existing_user"] = existing_user
+        email = attrs.get("email", "").strip()
+        attrs["email"] = email
+        self._validate_email_conflict(email, existing_user)
 
         if request and not user_can_access_branch(request.user, branch):
             raise ValidationError(

@@ -268,6 +268,9 @@ SMS_BACKEND = env(
     "SMS_BACKEND",
     default="accounts.sms.LoggingSMSBackend",
 )
+TELERIVET_API_KEY = env("TELERIVET_API_KEY", default="")
+TELERIVET_PROJECT_ID = env("TELERIVET_PROJECT_ID", default="")
+TELERIVET_TIMEOUT_SECONDS = env.int("TELERIVET_TIMEOUT_SECONDS", default=10)
 PARENT_OTP_EXPIRY_SECONDS = env.int(
     "PARENT_OTP_EXPIRY_SECONDS",
     default=300,
