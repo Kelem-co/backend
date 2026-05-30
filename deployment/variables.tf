@@ -77,6 +77,17 @@ variable "user_data_template_file" {
   default     = "templates/user_data.sh.tftpl"
 }
 
+variable "swap_size_mib" {
+  description = "Size of the AWS EC2 swap file in MiB."
+  type        = number
+  default     = 2048
+
+  validation {
+    condition     = var.swap_size_mib > 0
+    error_message = "swap_size_mib must be greater than 0."
+  }
+}
+
 variable "volume_size" {
   type        = number
   description = "Size in GiB for the root EBS volume attached to instances"

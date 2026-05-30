@@ -1,0 +1,125 @@
+name: Main deploy
+
+env:
+  DOCKER_BUILDKIT: 1
+  COMPOSE_DOCKER_CLI_BUILD: 1
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create release tag
+        id: release_tag
+        run: |
+          set -euo pipefail
+
+          latest_tag="$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || true)"
+          latest_tag="${latest_tag:-v0.0.0}"
+          version="${latest_tag#v}"
+          IFS='.' read -r major minor patch <<< "$version"
+          next_tag="v${major}.${minor}.$((patch + 1))"
+
+          if [[ "$latest_tag" == "v0.0.0" ]]; then
+            changes="$(git log --pretty=format:'- %s (%h)' || true)"
+          else
+            changes="$(git log "${latest_tag}..HEAD" --pretty=format:'- %s (%h)' || true)"
+          fi
+
+          if [[ -z "$changes" ]]; then
+            changes="No changes recorded."
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$next_tag" -m "Release $next_tag"
+          git push origin "$next_tag"
+
+          {
+            echo "release_tag=$next_tag"
+            echo "release_body<<EOF"
+            printf '## %s\n\n%s\n' "$next_tag" "$changes"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release_tag.outputs.release_tag }}
+          name: Release ${{ steps.release_tag.outputs.release_tag }}
+          body: ${{ steps.release_tag.outputs.release_body }}
+
+      - name: Select deploy secret
+        env:
+          DEPLOY_SECRET: ${{ secrets.DEPLOY_SECRET }}
+        run: |
+            printf '%s' "${DEPLOY_SECRET}" > .deploy_secret.b64
+
+      - name: Load SSH and project env
+        run: |
+          base64 --decode .deploy_secret.b64 > .secrets.env
+          set -a
+          source .secrets.env
+          set +a
+
+          echo "SSH_HOST=$SSH_HOST" >> "$GITHUB_ENV"
+          echo "SSH_USERNAME=$SSH_USERNAME" >> "$GITHUB_ENV"
+          echo "SSH_PORT=$SSH_PORT" >> "$GITHUB_ENV"
+          echo "PROJECT_FOLDER=$PROJECT_FOLDER" >> "$GITHUB_ENV"
+          echo "SSH_KEY<<EOF" >> "$GITHUB_ENV"
+          echo "$SSH_KEY" >> "$GITHUB_ENV"
+          echo "EOF" >> "$GITHUB_ENV"
+
+      - name: Load encoded production env files from GitHub environment
+        env:
+          PRODUCTION_DJANGO_ENV_B64: ${{ secrets.PRODUCTION_DJANGO_ENV }}
+          PRODUCTION_POSTGRES_ENV_B64: ${{ secrets.PRODUCTION_POSTGRES_ENV }}
+        run: |
+          {
+            echo "PRODUCTION_DJANGO_ENV_B64<<EOF"
+            printf '%s\n' "$PRODUCTION_DJANGO_ENV_B64"
+            echo "EOF"
+            echo "PRODUCTION_POSTGRES_ENV_B64<<EOF"
+            printf '%s\n' "$PRODUCTION_POSTGRES_ENV_B64"
+            echo "EOF"
+          } >> "$GITHUB_ENV"
+
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ env.SSH_HOST }}
+          username: ${{ env.SSH_USERNAME }}
+          port: ${{ env.SSH_PORT }}
+          key: ${{ env.SSH_KEY }}
+          envs: PROJECT_FOLDER,PRODUCTION_DJANGO_ENV_B64,PRODUCTION_POSTGRES_ENV_B64
+          script: |
+            set -euo pipefail
+            cd "${{ env.PROJECT_FOLDER }}"
+            mkdir -p .envs/.production
+            printf '%s' "$PRODUCTION_DJANGO_ENV_B64" | base64 --decode > .envs/.production/.django
+            printf '%s' "$PRODUCTION_POSTGRES_ENV_B64" | base64 --decode > .envs/.production/.postgres
+            git fetch origin --tags --force
+            git checkout "${{ steps.release_tag.outputs.release_tag }}"
+            docker compose -f docker-compose.production.yml up -d --build --remove-orphans
+
+      - name: Cleanup
+        if: always()
+        run: rm -f .deploy_secret.b64 .secrets.env
