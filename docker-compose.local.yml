@@ -95,12 +95,15 @@ services:
     ports:
       - ${S3_PORT}:9000
       - ${S3_CONSOLE_PORT:-9001}:${S3_CONSOLE_PORT:-9001}
-    environment:
-      MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID}
-      MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY}
     volumes:
       - core_local_minio_data:/data
-    command: server /data --console-address ":${S3_CONSOLE_PORT:-9001}"
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        export MINIO_ROOT_USER="$${S3_ACCESS_KEY_ID}"
+        export MINIO_ROOT_PASSWORD="$${S3_SECRET_ACCESS_KEY}"
+        exec minio server /data --console-address ":$${S3_CONSOLE_PORT:-9001}"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 5s
@@ -119,6 +122,7 @@ services:
       - /bin/sh
       - -c
       - |
+        set -eu
         mc alias set local http://minio:9000 \
           "$S3_ACCESS_KEY_ID" \
           "$S3_SECRET_ACCESS_KEY"
