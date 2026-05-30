@@ -19,6 +19,7 @@ from rest_framework import status
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
+from rest_framework.filters import OrderingFilter
 from rest_framework.filters import SearchFilter
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -91,6 +92,16 @@ STUDENT_LIST_PARAMETERS = [
         location=OpenApiParameter.QUERY,
         enum=[choice for choice, _label in Student.Gender.choices],
         description="Filter by student gender.",
+    ),
+    OpenApiParameter(
+        name="ordering",
+        type=OpenApiTypes.STR,
+        location=OpenApiParameter.QUERY,
+        description=(
+            "Sort by field name. Prefix with '-' for descending. "
+            "Allowed: first_name, last_name, roll_no, created_at, "
+            "current_section__name, current_section__grade__name."
+        ),
     ),
 ]
 
@@ -245,7 +256,7 @@ class StudentViewSet(viewsets.ModelViewSet):
     """
 
     lookup_field = "id"
-    filter_backends = [SearchFilter]
+    filter_backends = [SearchFilter, OrderingFilter]
     search_fields = [
         "first_name",
         "last_name",
@@ -253,6 +264,15 @@ class StudentViewSet(viewsets.ModelViewSet):
         "current_section__name",
         "current_section__grade__name",
     ]
+    ordering_fields = [
+        "first_name",
+        "last_name",
+        "roll_no",
+        "created_at",
+        "current_section__name",
+        "current_section__grade__name",
+    ]
+    ordering = ["first_name", "last_name", "id"]
 
     def _base_queryset(self):
         return Student.objects.select_related(
