@@ -1,8 +1,10 @@
 from assessments.models import Assessment
 from assessments.models import AssessmentResult
+from assessments.models import HomeworkConfirmation
 from django.db import IntegrityError
 from django.db import transaction
 from django.db.models import Q
+from django.utils import timezone
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter
 from drf_spectacular.utils import extend_schema
@@ -15,6 +17,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from core.api.access import scope_assessment_result_queryset_for_user
+from core.api.access import teacher_section_access_filter
 from core.api.access import user_can_access_branch
 from core.api.access import user_can_access_student_as_parent_or_staff
 from core.api.access import user_resource_access_filter
@@ -24,6 +27,7 @@ from .serializers import AssessmentResultReadSerializer
 from .serializers import AssessmentResultSerializer
 from .serializers import AssessmentSerializer
 from .serializers import BulkGradeSerializer
+from .serializers import HomeworkConfirmationSerializer
 from .serializers import ParentHomeworkConfirmSerializer
 
 # ---------------------------------------------------------------------------
@@ -220,6 +224,8 @@ class AssessmentResultViewSet(viewsets.ModelViewSet):
             "student",
             "graded_by",
             "organization",
+            "homework_confirmation",
+            "assessment__branch",
         )
         if getattr(self, "swagger_fake_view", False):
             return qs.none()
@@ -232,6 +238,8 @@ class AssessmentResultViewSet(viewsets.ModelViewSet):
                 )
                 | Q(student__parent_links__parent__user=self.request.user),
             ).distinct()
+        elif self.action == "todays_homework":
+            qs = self._scope_todays_homework_queryset(qs)
         else:
             qs = scope_assessment_result_queryset_for_user(qs, self.request.user)
         p = self.request.query_params
@@ -246,14 +254,46 @@ class AssessmentResultViewSet(viewsets.ModelViewSet):
         if p.get("parent_confirmed") is not None:
             val = p["parent_confirmed"].lower() in ("true", "1", "yes")
             qs = qs.filter(parent_confirmed=val)
+        if p.get("section"):
+            qs = qs.filter(assessment__teacher_assignment__section_id=p["section"])
+        if p.get("branch"):
+            qs = qs.filter(assessment__branch_id=p["branch"])
+        if p.get("confirmed") is not None:
+            val = p["confirmed"].lower() in ("true", "1", "yes")
+            qs = qs.filter(parent_confirmed=val)
         return qs
 
     def get_serializer_class(self):
-        if self.action in ["list", "retrieve", "by_assessment", "by_student"]:
+        if self.action in [
+            "list",
+            "retrieve",
+            "by_assessment",
+            "by_student",
+            "todays_homework",
+        ]:
             return AssessmentResultReadSerializer
         if self.action == "confirm_homework":
             return ParentHomeworkConfirmSerializer
         return AssessmentResultSerializer
+
+    def _scope_todays_homework_queryset(self, queryset):
+        access_filter = Q(pk__in=[])
+        if getattr(self.request.user, "is_authenticated", False):
+            if hasattr(self.request.user, "parent_profile"):
+                access_filter |= Q(student__parent_links__parent__user=self.request.user)
+            else:
+                access_filter |= user_resource_access_filter(
+                    self.request.user,
+                    branch_lookup="assessment__branch",
+                )
+            access_filter |= Q(
+                assessment__teacher_assignment__teacher__user=self.request.user,
+            )
+            access_filter |= teacher_section_access_filter(
+                self.request.user,
+                section_lookup="assessment__teacher_assignment__section",
+            )
+        return queryset.filter(access_filter).distinct()
 
     def perform_create(self, serializer):
         self._enforce_teacher_result_access(
@@ -364,12 +404,6 @@ class AssessmentResultViewSet(viewsets.ModelViewSet):
             message = "You cannot confirm this homework result."
             raise PermissionDenied(message)
 
-        if result.parent_confirmed:
-            return Response(
-                {"detail": "Homework completion is already confirmed."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
         serializer = ParentHomeworkConfirmSerializer(
             result,
             data=request.data,
@@ -377,7 +411,69 @@ class AssessmentResultViewSet(viewsets.ModelViewSet):
             context={"request": request},
         )
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        data = {
+            "assessment_result": result.id,
+            "is_confirmed": serializer.validated_data.get("parent_confirmed", True),
+            "feedback": serializer.validated_data.get("feedback", ""),
+        }
+        confirmation_serializer = HomeworkConfirmationSerializer(
+            data=data,
+            context={"request": request},
+        )
+        confirmation_serializer.is_valid(raise_exception=True)
+        confirmation = confirmation_serializer.save()
+        return Response(
+            AssessmentResultReadSerializer(
+                confirmation.assessment_result,
+                context={"request": request},
+            ).data,
+        )
+
+    @action(detail=False, methods=["get"], url_path="todays-homework")
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="student",
+                type=OpenApiTypes.UUID,
+                location=OpenApiParameter.QUERY,
+                description="Filter by student ID.",
+                required=False,
+            ),
+            OpenApiParameter(
+                name="section",
+                type=OpenApiTypes.UUID,
+                location=OpenApiParameter.QUERY,
+                description="Filter by section ID.",
+                required=False,
+            ),
+            OpenApiParameter(
+                name="branch",
+                type=OpenApiTypes.UUID,
+                location=OpenApiParameter.QUERY,
+                description="Filter by branch ID.",
+                required=False,
+            ),
+            OpenApiParameter(
+                name="confirmed",
+                type=OpenApiTypes.BOOL,
+                location=OpenApiParameter.QUERY,
+                description="Filter by homework confirmation state.",
+                required=False,
+            ),
+        ],
+    )
+    def todays_homework(self, request):
+        today = timezone.localdate()
+        qs = self.get_queryset().filter(
+            assessment__task_type=Assessment.TaskType.HOMEWORK,
+            assessment__due_date=today,
+        )
+        qs = self.filter_queryset(qs)
+        page = self.paginate_queryset(qs)
+        if page is not None:
+            serializer = AssessmentResultReadSerializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        serializer = AssessmentResultReadSerializer(qs, many=True)
         return Response(serializer.data)
 
     # ------------------------------------------------------------------
@@ -423,3 +519,36 @@ class AssessmentResultViewSet(viewsets.ModelViewSet):
         qs = self.filter_queryset(qs)
         serializer = AssessmentResultReadSerializer(qs, many=True)
         return Response(serializer.data)
+
+
+class HomeworkConfirmationViewSet(viewsets.GenericViewSet):
+    queryset = HomeworkConfirmation.objects.select_related(
+        "assessment_result__assessment__teacher_assignment__section",
+        "assessment_result__student",
+        "organization",
+        "branch",
+        "section",
+        "assessment",
+        "student",
+        "confirmed_by",
+    )
+    serializer_class = HomeworkConfirmationSerializer
+    permission_classes = [IsAuthenticated]
+    http_method_names = ["post"]
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(
+            data=request.data,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        result = serializer.validated_data["assessment_result"]
+        if not user_can_access_student_as_parent_or_staff(request.user, result.student):
+            message = "You cannot confirm this homework result."
+            raise PermissionDenied(message)
+
+        confirmation = serializer.save()
+        return Response(
+            self.get_serializer(confirmation).data,
+            status=status.HTTP_200_OK,
+        )

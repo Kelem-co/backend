@@ -26,6 +26,8 @@ from teachers.models import TeacherSubjectAssignment
 from media.models import StatusChoices
 from media.tests.factories import MediaFileFactory
 
+MIN_EXPECTED_MATCHED_STUDENTS = 2
+
 
 @pytest.mark.django_db
 class TestStudentsAPI:
@@ -511,7 +513,7 @@ class TestStudentsAPI:
         assert response.status_code == status.HTTP_200_OK
 
         results = response.data["results"]
-        assert len(results) >= 2
+        assert len(results) >= MIN_EXPECTED_MATCHED_STUDENTS
         names = [item["first_name"] for item in results]
         assert names == sorted(names)
         assert all(item["grade_id"] == str(target_grade.id) for item in results)

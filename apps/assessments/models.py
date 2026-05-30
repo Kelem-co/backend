@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.core.validators import MinValueValidator
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
@@ -238,3 +239,106 @@ class AssessmentResult(UUIDModel, TimeStampedModel):
         if self.obtained_marks is None or pm is None:
             return False
         return self.obtained_marks < pm
+
+
+class HomeworkConfirmation(UUIDModel, TimeStampedModel):
+    organization = models.ForeignKey(
+        "organizations.Organization",
+        on_delete=models.CASCADE,
+        related_name="homework_confirmations",
+        verbose_name=_("Organization"),
+    )
+    branch = models.ForeignKey(
+        "branches.Branch",
+        on_delete=models.CASCADE,
+        related_name="homework_confirmations",
+        verbose_name=_("Branch"),
+    )
+    section = models.ForeignKey(
+        "academics.Section",
+        on_delete=models.CASCADE,
+        related_name="homework_confirmations",
+        verbose_name=_("Section"),
+    )
+    assessment = models.ForeignKey(
+        Assessment,
+        on_delete=models.CASCADE,
+        related_name="homework_confirmations",
+        verbose_name=_("Assessment"),
+    )
+    student = models.ForeignKey(
+        "students.Student",
+        on_delete=models.CASCADE,
+        related_name="homework_confirmations",
+        verbose_name=_("Student"),
+    )
+    assessment_result = models.OneToOneField(
+        AssessmentResult,
+        on_delete=models.CASCADE,
+        related_name="homework_confirmation",
+        verbose_name=_("Assessment Result"),
+    )
+    is_confirmed = models.BooleanField(_("Is Confirmed"), default=False)
+    confirmed_at = models.DateTimeField(_("Confirmed At"), null=True, blank=True)
+    feedback = models.TextField(_("Feedback"), blank=True)
+    confirmed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="homework_confirmations",
+        verbose_name=_("Confirmed By"),
+    )
+
+    class Meta:
+        verbose_name = _("Homework Confirmation")
+        verbose_name_plural = _("Homework Confirmations")
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["organization", "is_confirmed"]),
+            models.Index(fields=["branch", "section"]),
+            models.Index(fields=["assessment", "student"]),
+        ]
+
+    def __str__(self):
+        return f"{self.student} | {self.assessment.title} | {self.is_confirmed}"
+
+    def clean(self):
+        super().clean()
+
+        if not self.assessment_result_id:
+            return
+
+        result = self.assessment_result
+        errors = {}
+
+        if result.assessment.task_type != Assessment.TaskType.HOMEWORK:
+            errors["assessment_result"] = _(
+                "Homework confirmations are only valid for homework results.",
+            )
+
+        expected_section_id = result.assessment.teacher_assignment.section_id
+        comparisons = {
+            "organization": result.organization_id,
+            "branch": result.assessment.branch_id,
+            "section": expected_section_id,
+            "assessment": result.assessment_id,
+            "student": result.student_id,
+        }
+        current_values = {
+            "organization": self.organization_id,
+            "branch": self.branch_id,
+            "section": self.section_id,
+            "assessment": self.assessment_id,
+            "student": self.student_id,
+        }
+
+        for field_name, expected_value in comparisons.items():
+            current_value = current_values[field_name]
+            if current_value is not None and current_value != expected_value:
+                errors[field_name] = _(
+                    "This value must match the linked assessment result.",
+                )
+
+        if errors:
+            raise ValidationError(errors)

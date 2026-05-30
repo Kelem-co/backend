@@ -17,7 +17,6 @@ from django.urls import reverse
 from core.mcp_backend_docs.openapi import OpenAPISchemaLoader
 from core.mcp_backend_docs.openapi import SchemaLoadError
 from core.mcp_backend_docs.openapi import SchemaSourceConfig
-from core.mcp_backend_docs.openapi import summarize_schema
 from core.mcp_backend_docs.server import RESOURCE_DEFINITIONS
 from core.mcp_backend_docs.server import BackendAPIDocsMCPServer
 
@@ -109,7 +108,6 @@ def test_network_mcp_endpoint_supports_initialize() -> None:
 
 @pytest.mark.django_db
 @override_settings(REST_FRAMEWORK=_NO_THROTTLE_SETTINGS)
-
 def test_loader_uses_fallback_file_when_backend_is_unavailable(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

@@ -82,6 +82,7 @@ class BranchViewSet(viewsets.ModelViewSet):
         return Response(
             {
                 "branch_id": str(branch.id),
+                "branch_name": branch.name,
                 "school_id": str(branch.school_id),
                 "school_name": branch.school.name,
             },

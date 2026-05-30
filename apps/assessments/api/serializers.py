@@ -1,5 +1,6 @@
 from assessments.models import Assessment
 from assessments.models import AssessmentResult
+from assessments.models import HomeworkConfirmation
 from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
@@ -182,6 +183,27 @@ class AssessmentResultReadSerializer(AssessmentResultSerializer):
         read_only=True,
         default=None,
     )
+    assessment_description = serializers.CharField(
+        source="assessment.description",
+        read_only=True,
+    )
+    assessment_due_date = serializers.DateField(
+        source="assessment.due_date",
+        read_only=True,
+    )
+    student_id = serializers.UUIDField(source="student.id", read_only=True)
+    assessment_id = serializers.UUIDField(source="assessment.id", read_only=True)
+    branch_id = serializers.UUIDField(source="assessment.branch.id", read_only=True)
+    branch_name = serializers.CharField(source="assessment.branch.name", read_only=True)
+    subject_id = serializers.UUIDField(
+        source="assessment.teacher_assignment.subject.id",
+        read_only=True,
+    )
+    section_id = serializers.UUIDField(
+        source="assessment.teacher_assignment.section.id",
+        read_only=True,
+    )
+    homework_confirmation = serializers.SerializerMethodField()
 
     class Meta(AssessmentResultSerializer.Meta):
         fields = [
@@ -192,15 +214,35 @@ class AssessmentResultReadSerializer(AssessmentResultSerializer):
             "section_name",
             "subject_name",
             "assessment_title",
+            "assessment_description",
+            "assessment_due_date",
+            "student_id",
+            "assessment_id",
+            "branch_id",
+            "branch_name",
+            "subject_id",
             "total_marks",
             "passing_marks",
             "percentage",
             "is_below_passing",
             "graded_by_name",
+            "section_id",
+            "homework_confirmation",
         ]
 
     def get_student_name(self, obj) -> str:
         return f"{obj.student.first_name} {obj.student.last_name}"
+
+    def get_homework_confirmation(self, obj):
+        confirmation = getattr(obj, "homework_confirmation", None)
+        if confirmation is None:
+            return None
+        return {
+            "id": str(confirmation.id),
+            "is_confirmed": confirmation.is_confirmed,
+            "feedback": confirmation.feedback,
+            "confirmed_at": confirmation.confirmed_at,
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -318,3 +360,97 @@ class ParentHomeworkConfirmSerializer(serializers.ModelSerializer):
             instance.parent_confirmed_by = self.context["request"].user
             instance.parent_confirmed_at = timezone.now()
         return super().update(instance, validated_data)
+
+
+class HomeworkConfirmationSerializer(serializers.ModelSerializer):
+    assessment_result = serializers.PrimaryKeyRelatedField(
+        queryset=AssessmentResult.objects.select_related(
+            "assessment__teacher_assignment__section",
+            "student",
+            "organization",
+        ),
+    )
+
+    class Meta:
+        model = HomeworkConfirmation
+        fields = [
+            "id",
+            "organization",
+            "branch",
+            "section",
+            "assessment",
+            "student",
+            "assessment_result",
+            "is_confirmed",
+            "confirmed_at",
+            "feedback",
+            "confirmed_by",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id",
+            "organization",
+            "branch",
+            "section",
+            "assessment",
+            "student",
+            "confirmed_at",
+            "confirmed_by",
+            "created_at",
+            "updated_at",
+        ]
+
+    def validate(self, attrs):
+        result = attrs["assessment_result"]
+        if result.assessment.task_type != Assessment.TaskType.HOMEWORK:
+            raise ValidationError(
+                {"assessment_result": "Only homework results can be confirmed."},
+            )
+        return attrs
+
+    def create(self, validated_data):
+        request = self.context["request"]
+        result = validated_data["assessment_result"]
+        existing_confirmation = getattr(result, "homework_confirmation", None)
+        defaults = {
+            "organization": result.organization,
+            "branch": result.assessment.branch,
+            "section": result.assessment.teacher_assignment.section,
+            "assessment": result.assessment,
+            "student": result.student,
+            "is_confirmed": validated_data["is_confirmed"],
+            "feedback": validated_data.get("feedback", ""),
+        }
+        if defaults["is_confirmed"]:
+            defaults["confirmed_at"] = (
+                existing_confirmation.confirmed_at
+                if existing_confirmation and existing_confirmation.confirmed_at
+                else timezone.now()
+            )
+            defaults["confirmed_by"] = request.user
+        else:
+            defaults["confirmed_at"] = None
+            defaults["confirmed_by"] = None
+
+        confirmation, _created = HomeworkConfirmation.objects.update_or_create(
+            assessment_result=result,
+            defaults=defaults,
+        )
+        confirmation.full_clean()
+        confirmation.save()
+        self._sync_result_summary(result, confirmation, request.user)
+        return confirmation
+
+    def _sync_result_summary(self, result, confirmation, user):
+        result.parent_confirmed = confirmation.is_confirmed
+        result.parent_confirmed_at = confirmation.confirmed_at
+        result.parent_confirmed_by = user if confirmation.is_confirmed else None
+        result.save(
+            update_fields=[
+                "parent_confirmed",
+                "parent_confirmed_at",
+                "parent_confirmed_by",
+                "updated_at",
+            ],
+        )

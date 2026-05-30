@@ -68,6 +68,7 @@ class TestBranchViewSet:
         assert response.status_code == status.HTTP_200_OK
         assert response.data == {
             "branch_id": str(branch.id),
+            "branch_name": branch.name,
             "school_id": str(branch.school_id),
             "school_name": branch.school.name,
         }
