@@ -302,7 +302,10 @@ class HomeworkConfirmation(UUIDModel, TimeStampedModel):
         super().clean()
         errors = {}
 
-        if self.assessment_id and self.assessment.task_type != Assessment.TaskType.HOMEWORK:
+        if (
+            self.assessment_id
+            and self.assessment.task_type != Assessment.TaskType.HOMEWORK
+        ):
             errors["assessment"] = _(
                 "Homework confirmations are only valid for homework assessments.",
             )
@@ -316,7 +319,10 @@ class HomeworkConfirmation(UUIDModel, TimeStampedModel):
                 errors["student"] = _(
                     "Student must belong to the same organization as the assessment.",
                 )
-            if self.student.current_section_id != self.assessment.teacher_assignment.section_id:
+            if (
+                self.student.current_section_id
+                != self.assessment.teacher_assignment.section_id
+            ):
                 errors["student"] = _(
                     "Student must belong to the assessment's section.",
                 )

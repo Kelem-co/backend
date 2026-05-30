@@ -147,17 +147,26 @@ class AssessmentViewSet(viewsets.ModelViewSet):
         include_student_rows = is_parent or bool(student_id)
 
         if is_parent:
-            students = __import__(
-                "students.models",
-                fromlist=["Student"],
-            ).Student.objects.filter(
-                parent_links__parent=parent_profile,
-            ).select_related("current_section").distinct()
+            students = (
+                __import__(
+                    "students.models",
+                    fromlist=["Student"],
+                )
+                .Student.objects.filter(
+                    parent_links__parent=parent_profile,
+                )
+                .select_related("current_section")
+                .distinct()
+            )
         elif student_id:
-            students = __import__(
-                "students.models",
-                fromlist=["Student"],
-            ).Student.objects.filter(id=student_id).select_related("current_section")
+            students = (
+                __import__(
+                    "students.models",
+                    fromlist=["Student"],
+                )
+                .Student.objects.filter(id=student_id)
+                .select_related("current_section")
+            )
         else:
             students = None
 
@@ -178,7 +187,9 @@ class AssessmentViewSet(viewsets.ModelViewSet):
         }
         assessment_confirmation_map = {}
         for confirmation in confirmations:
-            assessment_confirmation_map.setdefault(confirmation.assessment_id, []).append(
+            assessment_confirmation_map.setdefault(
+                confirmation.assessment_id, []
+            ).append(
                 confirmation,
             )
 
@@ -212,7 +223,9 @@ class AssessmentViewSet(viewsets.ModelViewSet):
                     )
                 continue
 
-            assessment_confirmations = assessment_confirmation_map.get(assessment.id, [])
+            assessment_confirmations = assessment_confirmation_map.get(
+                assessment.id, []
+            )
             assessment_confirmed = any(
                 confirmation.is_confirmed for confirmation in assessment_confirmations
             )

@@ -478,6 +478,9 @@ class TodaysHomeworkReadSerializer(serializers.Serializer):
     title = serializers.CharField(source="assessment.title")
     description = serializers.CharField(source="assessment.description")
     due_date = serializers.DateField(source="assessment.due_date")
+    teacher_name = serializers.CharField(
+        source="assessment.teacher_assignment.teacher.user.name",
+    )
     subject_name = serializers.CharField(
         source="assessment.teacher_assignment.subject.name",
     )

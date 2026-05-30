@@ -756,6 +756,7 @@ class TestTodaysHomeworkAPI:
         assert item["id"] == str(visible_assessment.id)
         assert item["student_name"] == "Liya Bekele"
         assert item["title"] == "Visible Homework"
+        assert item["teacher_name"] == teacher.user.name
         assert item["homework_confirmation"] is None
 
     def test_teacher_gets_only_own_section_homework_due_today(
@@ -998,7 +999,9 @@ class TestHomeworkConfirmationAPI:
             branches=[branch],
         )
         ParentStudentLinkFactory(
-            parent=parent, student=student, relationship_type="FATHER"
+            parent=parent,
+            student=student,
+            relationship_type="FATHER",
         )
         return parent
 
