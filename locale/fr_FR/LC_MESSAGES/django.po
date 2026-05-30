@@ -1,6 +1,6 @@
 # Translations for the core project
 # Copyright (C) 2026 oddegen
-# oddegen <oddegen@api.kelem.com>, 2026.
+# oddegen <oddegen@api.kelem.app>, 2026.
 #
 #, fuzzy
 msgid ""

@@ -329,6 +329,48 @@ class TestStudentsAPI:
             section=section,
         ).exists()
 
+    def test_student_read_includes_parent_full_name(
+        self,
+        api_client,
+        user,
+        organization,
+        branch,
+        section,
+    ):
+        api_client.force_authenticate(user=user)
+        student = StudentFactory(
+            organization=organization,
+            branch=branch,
+            current_section=section,
+        )
+        parent = ParentFactory(
+            organizations=[organization],
+            branches=[branch],
+        )
+        parent.user.name = "Rahel"
+        parent.user.father_name = "Bekele"
+        parent.user.grandfather_name = "Mekonnen"
+        parent.user.save(update_fields=["name", "father_name", "grandfather_name"])
+        ParentStudentLinkFactory(
+            student=student,
+            parent=parent,
+            relationship_type="MOTHER",
+            is_primary_contact=True,
+        )
+
+        response = api_client.get(f"/api/students/{student.id}/")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["parent_details"] == [
+            {
+                "id": str(parent.id),
+                "user": str(parent.user_id),
+                "full_name": "Rahel Bekele Mekonnen",
+                "relationship_type": "MOTHER",
+                "is_primary_contact": True,
+            },
+        ]
+
     def test_student_list_by_academic_year_and_section_uses_year_scoped_mapping(
         self,
         api_client,
@@ -857,6 +899,13 @@ class TestStudentsAPI:
         )
         visible_parent = ParentFactory(organizations=[organization], branches=[branch])
         hidden_parent = ParentFactory(organizations=[organization], branches=[branch])
+        visible_parent.user.phone_number = "+251911000111"
+        visible_parent.user.save(update_fields=["phone_number"])
+        visible_parent.secondary_phone_number = "+251911000222"
+        visible_parent.emergency_contact_phone = "+251911000333"
+        visible_parent.save(
+            update_fields=["secondary_phone_number", "emergency_contact_phone"],
+        )
         visible_link = ParentStudentLinkFactory(
             student=visible_student,
             parent=visible_parent,
@@ -891,12 +940,92 @@ class TestStudentsAPI:
         assert [item["id"] for item in parents_response.data["results"]] == [
             str(visible_parent.id),
         ]
+        assert (
+            parents_response.data["results"][0]["user_details"]["phone_number"] is None
+        )
+        assert parents_response.data["results"][0]["secondary_phone_number"] is None
+        assert parents_response.data["results"][0]["emergency_contact_phone"] is None
 
         links_response = api_client.get("/api/parent-links/")
         assert links_response.status_code == status.HTTP_200_OK
         assert [item["id"] for item in links_response.data["results"]] == [
             str(visible_link.id),
         ]
+        assert (
+            links_response.data["results"][0]["parent_details"]["user_details"][
+                "phone_number"
+            ]
+            is None
+        )
+        assert (
+            links_response.data["results"][0]["parent_details"][
+                "secondary_phone_number"
+            ]
+            is None
+        )
+        assert (
+            links_response.data["results"][0]["parent_details"][
+                "emergency_contact_phone"
+            ]
+            is None
+        )
+
+    def test_homeroom_teacher_can_view_parent_phone_numbers(self, api_client):
+        teacher_user = UserFactory(role="TEACHER")
+        organization = OrganizationFactory()
+        branch = BranchFactory(school__organization=organization)
+        academic_year = AcademicYear.objects.get(
+            organization=organization,
+            branch=branch,
+            name="2025/2026",
+        )
+        grade = GradeFactory(organization=organization, branch=branch)
+        section = SectionFactory(
+            organization=organization,
+            branch=branch,
+            grade=grade,
+            academic_year=academic_year,
+        )
+        student = StudentFactory(
+            organization=organization,
+            branch=branch,
+            current_section=section,
+        )
+        parent = ParentFactory(organizations=[organization], branches=[branch])
+        parent.user.phone_number = "+251922000111"
+        parent.user.save(update_fields=["phone_number"])
+        parent.secondary_phone_number = "+251922000222"
+        parent.emergency_contact_phone = "+251922000333"
+        parent.save(update_fields=["secondary_phone_number", "emergency_contact_phone"])
+        ParentStudentLinkFactory(student=student, parent=parent)
+        teacher = Teacher.objects.create(
+            user=teacher_user,
+            organization=organization,
+            branch=branch,
+            employee_id="TCHHOME001",
+            specialization="Homeroom",
+        )
+        HomeroomAssignment.objects.create(
+            organization=organization,
+            branch=branch,
+            academic_year=academic_year,
+            section=section,
+            teacher=teacher,
+        )
+        api_client.force_authenticate(user=teacher_user)
+
+        response = api_client.get("/api/parents/")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["results"][0]["user_details"]["phone_number"] == (
+            "+251922000111"
+        )
+        assert response.data["results"][0]["secondary_phone_number"] == (
+            "+251922000222"
+        )
+        assert response.data["results"][0]["emergency_contact_phone"] == (
+            "+251922000333"
+        )
 
     def test_parent_queryset_includes_branch_admin_branch(self, user):
         organization = OrganizationFactory()
