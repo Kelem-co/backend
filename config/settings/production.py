@@ -11,7 +11,7 @@ from .base import env
 # https://docs.djangoproject.com/en/dev/ref/settings/#secret-key
 SECRET_KEY = env("DJANGO_SECRET_KEY")
 # https://docs.djangoproject.com/en/dev/ref/settings/#allowed-hosts
-ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["api.kelem.com"])
+ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["api.kelem.app"])
 
 # DATABASES
 # ------------------------------------------------------------------------------
@@ -63,13 +63,30 @@ SECURE_CONTENT_TYPE_NOSNIFF = env.bool(
     default=True,
 )
 
+S3_PUBLIC_ENDPOINT = env("S3_PUBLIC_ENDPOINT", default="")
+
+
+def _env_or_fallback(primary_key: str, fallback_key: str, default=None):
+    primary_value = env(primary_key, default="")
+    if primary_value not in ("", None):
+        return primary_value
+    return env(fallback_key, default=default)
+
 
 # https://django-storages.readthedocs.io/en/latest/backends/amazon-S3.html#settings
-AWS_ACCESS_KEY_ID = env("DJANGO_AWS_ACCESS_KEY_ID")
+AWS_ACCESS_KEY_ID = _env_or_fallback("DJANGO_AWS_ACCESS_KEY_ID", "S3_ACCESS_KEY_ID", "")
 # https://django-storages.readthedocs.io/en/latest/backends/amazon-S3.html#settings
-AWS_SECRET_ACCESS_KEY = env("DJANGO_AWS_SECRET_ACCESS_KEY")
+AWS_SECRET_ACCESS_KEY = _env_or_fallback(
+    "DJANGO_AWS_SECRET_ACCESS_KEY",
+    "S3_SECRET_ACCESS_KEY",
+    "",
+)
 # https://django-storages.readthedocs.io/en/latest/backends/amazon-S3.html#settings
-AWS_STORAGE_BUCKET_NAME = env("DJANGO_AWS_STORAGE_BUCKET_NAME")
+AWS_STORAGE_BUCKET_NAME = _env_or_fallback(
+    "DJANGO_AWS_STORAGE_BUCKET_NAME",
+    "S3_BUCKET",
+    "",
+)
 # https://django-storages.readthedocs.io/en/latest/backends/amazon-S3.html#settings
 AWS_QUERYSTRING_AUTH = False
 # DO NOT change these unless you know what you're doing.
@@ -84,7 +101,18 @@ AWS_S3_MAX_MEMORY_SIZE = env.int(
     default=100_000_000,  # 100MB
 )
 # https://django-storages.readthedocs.io/en/latest/backends/amazon-S3.html#settings
-AWS_S3_REGION_NAME = env("DJANGO_AWS_S3_REGION_NAME", default=None)
+AWS_S3_REGION_NAME = _env_or_fallback("DJANGO_AWS_S3_REGION_NAME", "S3_REGION", None)
+# https://django-storages.readthedocs.io/en/latest/backends/amazon-S3.html#settings
+AWS_S3_ENDPOINT_URL = _env_or_fallback(
+    "DJANGO_AWS_S3_ENDPOINT_URL",
+    "S3_INTERNAL_ENDPOINT",
+    None,
+)
+# https://django-storages.readthedocs.io/en/latest/backends/amazon-S3.html#settings
+AWS_S3_ADDRESSING_STYLE = env(
+    "DJANGO_AWS_S3_ADDRESSING_STYLE",
+    default="path" if env.bool("S3_FORCE_PATH_STYLE", default=False) else None,
+)
 # https://django-storages.readthedocs.io/en/latest/backends/amazon-S3.html#cloudfront
 AWS_S3_CUSTOM_DOMAIN = env("DJANGO_AWS_S3_CUSTOM_DOMAIN", default=None)
 aws_s3_domain = AWS_S3_CUSTOM_DOMAIN or f"{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com"
@@ -106,16 +134,22 @@ STORAGES = {
         },
     },
 }
-MEDIA_URL = f"https://{aws_s3_domain}/media/"
+if S3_PUBLIC_ENDPOINT:
+    _s3_public_base_url = S3_PUBLIC_ENDPOINT.rstrip("/")
+    MEDIA_URL = f"{_s3_public_base_url}/media/"
+    STATIC_URL = f"{_s3_public_base_url}/static/"
+else:
+    MEDIA_URL = f"https://{aws_s3_domain}/media/"
+    STATIC_URL = f"https://{aws_s3_domain}/static/"
+
 COLLECTFASTA_STRATEGY = "collectfasta.strategies.boto3.Boto3Strategy"
-STATIC_URL = f"https://{aws_s3_domain}/static/"
 
 # EMAIL
 # ------------------------------------------------------------------------------
 # https://docs.djangoproject.com/en/dev/ref/settings/#default-from-email
 DEFAULT_FROM_EMAIL = env(
     "DJANGO_DEFAULT_FROM_EMAIL",
-    default="core <noreply@api.kelem.com>",
+    default="core <noreply@api.kelem.app>",
 )
 # https://docs.djangoproject.com/en/dev/ref/settings/#server-email
 SERVER_EMAIL = env("DJANGO_SERVER_EMAIL", default=DEFAULT_FROM_EMAIL)
@@ -198,7 +232,7 @@ LOGGING = {
 # -------------------------------------------------------------------------------
 # Tools that generate code samples can use SERVERS to point to the correct domain
 SPECTACULAR_SETTINGS["SERVERS"] = [
-    {"url": "https://api.kelem.com", "description": "Production server"},
+    {"url": "https://api.kelem.app", "description": "Production server"},
 ]
 # Your stuff...
 # ------------------------------------------------------------------------------
