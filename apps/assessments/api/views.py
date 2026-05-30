@@ -1,6 +1,7 @@
 from assessments.models import Assessment
 from assessments.models import AssessmentResult
 from assessments.models import HomeworkConfirmation
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError
 from django.db import transaction
 from django.db.models import Q
@@ -29,6 +30,7 @@ from .serializers import AssessmentSerializer
 from .serializers import BulkGradeSerializer
 from .serializers import HomeworkConfirmationSerializer
 from .serializers import ParentHomeworkConfirmSerializer
+from .serializers import TodaysHomeworkReadSerializer
 
 # ---------------------------------------------------------------------------
 # Assessment ViewSet
@@ -111,9 +113,125 @@ class AssessmentViewSet(viewsets.ModelViewSet):
         return qs
 
     def get_serializer_class(self):
-        if self.action in ["list", "retrieve", "by_section", "by_teacher"]:
+        if self.action in [
+            "list",
+            "retrieve",
+            "by_section",
+            "by_teacher",
+            "todays_homework",
+        ]:
             return AssessmentReadSerializer
         return AssessmentSerializer
+
+    def _build_todays_homework_rows(self):
+        today = timezone.localdate()
+        qs = self.get_queryset().filter(
+            task_type=Assessment.TaskType.HOMEWORK,
+            due_date=today,
+            status=Assessment.Status.PUBLISHED,
+        )
+        p = self.request.query_params
+        if p.get("branch"):
+            qs = qs.filter(branch_id=p["branch"])
+        if p.get("section"):
+            qs = qs.filter(teacher_assignment__section_id=p["section"])
+
+        try:
+            parent_profile = self.request.user.parent_profile
+            is_parent = True
+        except ObjectDoesNotExist:
+            parent_profile = None
+            is_parent = False
+
+        student_id = p.get("student")
+        include_student_rows = is_parent or bool(student_id)
+
+        if is_parent:
+            students = __import__(
+                "students.models",
+                fromlist=["Student"],
+            ).Student.objects.filter(
+                parent_links__parent=parent_profile,
+            ).select_related("current_section").distinct()
+        elif student_id:
+            students = __import__(
+                "students.models",
+                fromlist=["Student"],
+            ).Student.objects.filter(id=student_id).select_related("current_section")
+        else:
+            students = None
+
+        if students is not None and student_id:
+            students = students.filter(id=student_id)
+
+        confirmations = HomeworkConfirmation.objects.filter(
+            assessment_id__in=qs.values_list("id", flat=True),
+        )
+        if students is not None:
+            confirmations = confirmations.filter(
+                student_id__in=students.values_list("id", flat=True),
+            )
+        confirmations = confirmations.select_related("assessment", "student")
+        confirmation_map = {
+            (confirmation.assessment_id, confirmation.student_id): confirmation
+            for confirmation in confirmations
+        }
+        assessment_confirmation_map = {}
+        for confirmation in confirmations:
+            assessment_confirmation_map.setdefault(confirmation.assessment_id, []).append(
+                confirmation,
+            )
+
+        rows = []
+        confirmed_filter = p.get("confirmed")
+        for assessment in qs:
+            if include_student_rows:
+                matching_students = students.filter(
+                    current_section_id=assessment.teacher_assignment.section_id,
+                    branch_id=assessment.branch_id,
+                    organization_id=assessment.organization_id,
+                )
+                for student in matching_students:
+                    confirmation = confirmation_map.get((assessment.id, student.id))
+                    confirmed = bool(confirmation and confirmation.is_confirmed)
+                    if confirmed_filter is not None:
+                        requested_confirmed = confirmed_filter.lower() in (
+                            "true",
+                            "1",
+                            "yes",
+                        )
+                        if confirmed != requested_confirmed:
+                            continue
+                    rows.append(
+                        {
+                            "assessment": assessment,
+                            "student": student,
+                            "confirmed": confirmed,
+                            "homework_confirmation": confirmation,
+                        },
+                    )
+                continue
+
+            assessment_confirmations = assessment_confirmation_map.get(assessment.id, [])
+            assessment_confirmed = any(
+                confirmation.is_confirmed for confirmation in assessment_confirmations
+            )
+            if confirmed_filter is not None:
+                requested_confirmed = confirmed_filter.lower() in ("true", "1", "yes")
+                if assessment_confirmed != requested_confirmed:
+                    continue
+
+            rows.append(
+                {
+                    "assessment": assessment,
+                    "student": None,
+                    "confirmed": assessment_confirmed,
+                    "homework_confirmation": assessment_confirmations[0]
+                    if assessment_confirmations
+                    else None,
+                },
+            )
+        return rows
 
     # ------------------------------------------------------------------
     # GET /assessments/by-section/?section=<id>[&task_type=][&status=]
@@ -171,6 +289,48 @@ class AssessmentViewSet(viewsets.ModelViewSet):
         serializer = AssessmentReadSerializer(qs, many=True)
         return Response(serializer.data)
 
+    @action(detail=False, methods=["get"], url_path="todays-homework")
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="student",
+                type=OpenApiTypes.UUID,
+                location=OpenApiParameter.QUERY,
+                description="Filter by student ID.",
+                required=False,
+            ),
+            OpenApiParameter(
+                name="section",
+                type=OpenApiTypes.UUID,
+                location=OpenApiParameter.QUERY,
+                description="Filter by section ID.",
+                required=False,
+            ),
+            OpenApiParameter(
+                name="branch",
+                type=OpenApiTypes.UUID,
+                location=OpenApiParameter.QUERY,
+                description="Filter by branch ID.",
+                required=False,
+            ),
+            OpenApiParameter(
+                name="confirmed",
+                type=OpenApiTypes.BOOL,
+                location=OpenApiParameter.QUERY,
+                description="Filter by homework confirmation state.",
+                required=False,
+            ),
+        ],
+    )
+    def todays_homework(self, request):
+        rows = self._build_todays_homework_rows()
+        page = self.paginate_queryset(rows)
+        if page is not None:
+            serializer = TodaysHomeworkReadSerializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        serializer = TodaysHomeworkReadSerializer(rows, many=True)
+        return Response(serializer.data)
+
 
 # ---------------------------------------------------------------------------
 # AssessmentResult ViewSet
@@ -224,7 +384,6 @@ class AssessmentResultViewSet(viewsets.ModelViewSet):
             "student",
             "graded_by",
             "organization",
-            "homework_confirmation",
             "assessment__branch",
         )
         if getattr(self, "swagger_fake_view", False):
@@ -279,8 +438,16 @@ class AssessmentResultViewSet(viewsets.ModelViewSet):
     def _scope_todays_homework_queryset(self, queryset):
         access_filter = Q(pk__in=[])
         if getattr(self.request.user, "is_authenticated", False):
-            if hasattr(self.request.user, "parent_profile"):
-                access_filter |= Q(student__parent_links__parent__user=self.request.user)
+            try:
+                parent_profile = self.request.user.parent_profile
+                is_parent = True
+            except ObjectDoesNotExist:
+                parent_profile = None
+                is_parent = False
+            if is_parent:
+                access_filter |= Q(
+                    student__parent_links__parent=parent_profile,
+                )
             else:
                 access_filter |= user_resource_access_filter(
                     self.request.user,
@@ -412,7 +579,8 @@ class AssessmentResultViewSet(viewsets.ModelViewSet):
         )
         serializer.is_valid(raise_exception=True)
         data = {
-            "assessment_result": result.id,
+            "assessment": result.assessment_id,
+            "student": result.student_id,
             "is_confirmed": serializer.validated_data.get("parent_confirmed", True),
             "feedback": serializer.validated_data.get("feedback", ""),
         }
@@ -421,10 +589,10 @@ class AssessmentResultViewSet(viewsets.ModelViewSet):
             context={"request": request},
         )
         confirmation_serializer.is_valid(raise_exception=True)
-        confirmation = confirmation_serializer.save()
+        confirmation_serializer.save()
         return Response(
             AssessmentResultReadSerializer(
-                confirmation.assessment_result,
+                result,
                 context={"request": request},
             ).data,
         )
@@ -523,8 +691,6 @@ class AssessmentResultViewSet(viewsets.ModelViewSet):
 
 class HomeworkConfirmationViewSet(viewsets.GenericViewSet):
     queryset = HomeworkConfirmation.objects.select_related(
-        "assessment_result__assessment__teacher_assignment__section",
-        "assessment_result__student",
         "organization",
         "branch",
         "section",
@@ -542,8 +708,8 @@ class HomeworkConfirmationViewSet(viewsets.GenericViewSet):
             context={"request": request},
         )
         serializer.is_valid(raise_exception=True)
-        result = serializer.validated_data["assessment_result"]
-        if not user_can_access_student_as_parent_or_staff(request.user, result.student):
+        student = serializer.validated_data["student"]
+        if not user_can_access_student_as_parent_or_staff(request.user, student):
             message = "You cannot confirm this homework result."
             raise PermissionDenied(message)
 

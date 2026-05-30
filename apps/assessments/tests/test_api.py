@@ -666,7 +666,7 @@ class TestTodaysHomeworkAPI:
             user=UserFactory(role="BRANCH_ADMIN"),
         )
 
-    def _create_homework_result(
+    def _create_homework_assessment(
         self,
         *,
         organization,
@@ -678,6 +678,7 @@ class TestTodaysHomeworkAPI:
         student,
         due_date,
         title="Homework",
+        create_result=True,
     ):
         assignment, _created = TeacherSubjectAssignment.objects.get_or_create(
             teacher=teacher,
@@ -698,12 +699,14 @@ class TestTodaysHomeworkAPI:
             status=Assessment.Status.PUBLISHED,
             description="Read chapter 2",
         )
-        return AssessmentResult.objects.create(
-            organization=organization,
-            assessment=assessment,
-            student=student,
-            submission_status=AssessmentResult.SubmissionStatus.PENDING,
-        )
+        if create_result:
+            AssessmentResult.objects.create(
+                organization=organization,
+                assessment=assessment,
+                student=student,
+                submission_status=AssessmentResult.SubmissionStatus.PENDING,
+            )
+        return assessment
 
     def test_parent_gets_only_linked_students_homework_due_today(
         self,
@@ -721,7 +724,7 @@ class TestTodaysHomeworkAPI:
         linked_parent,
     ):
         today = timezone.localdate()
-        visible_result = self._create_homework_result(
+        visible_assessment = self._create_homework_assessment(
             organization=organization,
             branch=branch,
             academic_year=academic_year,
@@ -732,7 +735,7 @@ class TestTodaysHomeworkAPI:
             due_date=today,
             title="Visible Homework",
         )
-        self._create_homework_result(
+        self._create_homework_assessment(
             organization=organization,
             branch=branch,
             academic_year=academic_year,
@@ -745,14 +748,14 @@ class TestTodaysHomeworkAPI:
         )
         api_client.force_authenticate(user=parent.user)
 
-        response = api_client.get("/api/assessment-results/todays-homework/")
+        response = api_client.get("/api/assessments/todays-homework/")
 
         assert response.status_code == status.HTTP_200_OK
         assert response.data["count"] == 1
         item = response.data["results"][0]
-        assert item["id"] == str(visible_result.id)
+        assert item["id"] == str(visible_assessment.id)
         assert item["student_name"] == "Liya Bekele"
-        assert item["assessment_title"] == "Visible Homework"
+        assert item["title"] == "Visible Homework"
         assert item["homework_confirmation"] is None
 
     def test_teacher_gets_only_own_section_homework_due_today(
@@ -770,7 +773,7 @@ class TestTodaysHomeworkAPI:
         other_student,
     ):
         today = timezone.localdate()
-        own_result = self._create_homework_result(
+        own_assessment = self._create_homework_assessment(
             organization=organization,
             branch=branch,
             academic_year=academic_year,
@@ -781,7 +784,7 @@ class TestTodaysHomeworkAPI:
             due_date=today,
             title="Own Homework",
         )
-        self._create_homework_result(
+        self._create_homework_assessment(
             organization=organization,
             branch=branch,
             academic_year=academic_year,
@@ -794,11 +797,11 @@ class TestTodaysHomeworkAPI:
         )
         api_client.force_authenticate(user=teacher.user)
 
-        response = api_client.get("/api/assessment-results/todays-homework/")
+        response = api_client.get("/api/assessments/todays-homework/")
 
         assert response.status_code == status.HTTP_200_OK
         assert response.data["count"] == 1
-        assert response.data["results"][0]["id"] == str(own_result.id)
+        assert response.data["results"][0]["id"] == str(own_assessment.id)
 
     def test_branch_admin_gets_scoped_homework_and_non_today_is_excluded(
         self,
@@ -813,7 +816,7 @@ class TestTodaysHomeworkAPI:
         branch_admin,
     ):
         today = timezone.localdate()
-        expected_result = self._create_homework_result(
+        expected_assessment = self._create_homework_assessment(
             organization=organization,
             branch=branch,
             academic_year=academic_year,
@@ -824,7 +827,7 @@ class TestTodaysHomeworkAPI:
             due_date=today,
             title="Today Homework",
         )
-        self._create_homework_result(
+        self._create_homework_assessment(
             organization=organization,
             branch=branch,
             academic_year=academic_year,
@@ -841,11 +844,11 @@ class TestTodaysHomeworkAPI:
         )
         api_client.force_authenticate(user=branch_admin.user)
 
-        response = api_client.get("/api/assessment-results/todays-homework/")
+        response = api_client.get("/api/assessments/todays-homework/")
 
         assert response.status_code == status.HTTP_200_OK
         assert response.data["count"] == 1
-        assert response.data["results"][0]["id"] == str(expected_result.id)
+        assert response.data["results"][0]["id"] == str(expected_assessment.id)
 
     def test_today_endpoint_can_filter_by_confirmation_state(
         self,
@@ -860,7 +863,7 @@ class TestTodaysHomeworkAPI:
         student,
     ):
         today = timezone.localdate()
-        confirmed_result = self._create_homework_result(
+        confirmed_assessment = self._create_homework_assessment(
             organization=organization,
             branch=branch,
             academic_year=academic_year,
@@ -871,7 +874,7 @@ class TestTodaysHomeworkAPI:
             due_date=today,
             title="Confirmed Homework",
         )
-        unconfirmed_result = self._create_homework_result(
+        unconfirmed_assessment = self._create_homework_assessment(
             organization=organization,
             branch=branch,
             academic_year=academic_year,
@@ -890,30 +893,27 @@ class TestTodaysHomeworkAPI:
             organization=organization,
             branch=branch,
             section=section,
-            assessment=confirmed_result.assessment,
-            student=confirmed_result.student,
-            assessment_result=confirmed_result,
+            assessment=confirmed_assessment,
+            student=student,
             is_confirmed=True,
             confirmed_at=timezone.now(),
             confirmed_by=owner,
             feedback="Done",
         )
-        confirmed_result.parent_confirmed = True
-        confirmed_result.parent_confirmed_at = timezone.now()
-        confirmed_result.parent_confirmed_by = owner
-        confirmed_result.save()
         api_client.force_authenticate(user=owner)
 
         response = api_client.get(
-            "/api/assessment-results/todays-homework/",
+            "/api/assessments/todays-homework/",
             {"confirmed": "true"},
         )
 
         assert response.status_code == status.HTTP_200_OK
         assert response.data["count"] == 1
-        assert response.data["results"][0]["id"] == str(confirmed_result.id)
-        assert response.data["results"][0]["homework_confirmation"]["feedback"] == "Done"
-        assert str(unconfirmed_result.id) not in {
+        assert response.data["results"][0]["id"] == str(confirmed_assessment.id)
+        assert (
+            response.data["results"][0]["homework_confirmation"]["feedback"] == "Done"
+        )
+        assert str(unconfirmed_assessment.id) not in {
             item["id"] for item in response.data["results"]
         }
 
@@ -997,7 +997,9 @@ class TestHomeworkConfirmationAPI:
             organizations=[organization],
             branches=[branch],
         )
-        ParentStudentLinkFactory(parent=parent, student=student, relationship_type="FATHER")
+        ParentStudentLinkFactory(
+            parent=parent, student=student, relationship_type="FATHER"
+        )
         return parent
 
     @pytest.fixture
@@ -1070,7 +1072,7 @@ class TestHomeworkConfirmationAPI:
             student=student,
         )
 
-    def test_post_confirmation_creates_record_and_syncs_summary_fields(
+    def test_post_confirmation_creates_record_without_touching_legacy_summary_fields(
         self,
         api_client,
         parent,
@@ -1081,7 +1083,8 @@ class TestHomeworkConfirmationAPI:
         response = api_client.post(
             "/api/homework-confirmations/",
             {
-                "assessment_result": str(homework_result.id),
+                "assessment": str(homework_result.assessment_id),
+                "student": str(homework_result.student_id),
                 "is_confirmed": True,
                 "feedback": "Completed after dinner",
             },
@@ -1090,13 +1093,14 @@ class TestHomeworkConfirmationAPI:
 
         homework_result.refresh_from_db()
         confirmation = HomeworkConfirmation.objects.get(
-            assessment_result=homework_result,
+            assessment=homework_result.assessment,
+            student=homework_result.student,
         )
         assert response.status_code == status.HTTP_200_OK
         assert confirmation.feedback == "Completed after dinner"
-        assert homework_result.parent_confirmed is True
-        assert homework_result.parent_confirmed_by == parent.user
-        assert homework_result.parent_confirmed_at is not None
+        assert homework_result.parent_confirmed is False
+        assert homework_result.parent_confirmed_by is None
+        assert homework_result.parent_confirmed_at is None
 
     def test_reposting_updates_existing_confirmation_instead_of_creating_second(
         self,
@@ -1108,7 +1112,8 @@ class TestHomeworkConfirmationAPI:
         first_response = api_client.post(
             "/api/homework-confirmations/",
             {
-                "assessment_result": str(homework_result.id),
+                "assessment": str(homework_result.assessment_id),
+                "student": str(homework_result.student_id),
                 "is_confirmed": True,
                 "feedback": "Initial note",
             },
@@ -1119,7 +1124,8 @@ class TestHomeworkConfirmationAPI:
         second_response = api_client.post(
             "/api/homework-confirmations/",
             {
-                "assessment_result": str(homework_result.id),
+                "assessment": str(homework_result.assessment_id),
+                "student": str(homework_result.student_id),
                 "is_confirmed": True,
                 "feedback": "Updated note",
             },
@@ -1142,7 +1148,8 @@ class TestHomeworkConfirmationAPI:
         response = api_client.post(
             "/api/homework-confirmations/",
             {
-                "assessment_result": str(quiz_result.id),
+                "assessment": str(quiz_result.assessment_id),
+                "student": str(quiz_result.student_id),
                 "is_confirmed": True,
                 "feedback": "Should fail",
             },
@@ -1162,7 +1169,8 @@ class TestHomeworkConfirmationAPI:
         response = api_client.post(
             "/api/homework-confirmations/",
             {
-                "assessment_result": str(homework_result.id),
+                "assessment": str(homework_result.assessment_id),
+                "student": str(homework_result.student_id),
                 "is_confirmed": True,
             },
             format="json",
@@ -1174,14 +1182,23 @@ class TestHomeworkConfirmationAPI:
         self,
         organization,
         branch,
+        academic_year,
+        grade,
         section,
         homework_result,
         owner,
     ):
+        other_section = SectionFactory(
+            organization=organization,
+            branch=branch,
+            grade=grade,
+            academic_year=academic_year,
+            name="B",
+        )
         other_student = StudentFactory(
             organization=organization,
             branch=branch,
-            current_section=section,
+            current_section=other_section,
         )
         confirmation = HomeworkConfirmation(
             organization=organization,
@@ -1189,7 +1206,6 @@ class TestHomeworkConfirmationAPI:
             section=section,
             assessment=homework_result.assessment,
             student=other_student,
-            assessment_result=homework_result,
             is_confirmed=True,
             confirmed_by=owner,
         )

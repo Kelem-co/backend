@@ -1,6 +1,6 @@
 from django.conf import settings
-from django.core.validators import MinValueValidator
 from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
@@ -272,12 +272,6 @@ class HomeworkConfirmation(UUIDModel, TimeStampedModel):
         related_name="homework_confirmations",
         verbose_name=_("Student"),
     )
-    assessment_result = models.OneToOneField(
-        AssessmentResult,
-        on_delete=models.CASCADE,
-        related_name="homework_confirmation",
-        verbose_name=_("Assessment Result"),
-    )
     is_confirmed = models.BooleanField(_("Is Confirmed"), default=False)
     confirmed_at = models.DateTimeField(_("Confirmed At"), null=True, blank=True)
     feedback = models.TextField(_("Feedback"), blank=True)
@@ -294,6 +288,7 @@ class HomeworkConfirmation(UUIDModel, TimeStampedModel):
         verbose_name = _("Homework Confirmation")
         verbose_name_plural = _("Homework Confirmations")
         ordering = ["-created_at"]
+        unique_together = ("assessment", "student")
         indexes = [
             models.Index(fields=["organization", "is_confirmed"]),
             models.Index(fields=["branch", "section"]),
@@ -305,39 +300,41 @@ class HomeworkConfirmation(UUIDModel, TimeStampedModel):
 
     def clean(self):
         super().clean()
-
-        if not self.assessment_result_id:
-            return
-
-        result = self.assessment_result
         errors = {}
 
-        if result.assessment.task_type != Assessment.TaskType.HOMEWORK:
-            errors["assessment_result"] = _(
-                "Homework confirmations are only valid for homework results.",
+        if self.assessment_id and self.assessment.task_type != Assessment.TaskType.HOMEWORK:
+            errors["assessment"] = _(
+                "Homework confirmations are only valid for homework assessments.",
             )
 
-        expected_section_id = result.assessment.teacher_assignment.section_id
-        comparisons = {
-            "organization": result.organization_id,
-            "branch": result.assessment.branch_id,
-            "section": expected_section_id,
-            "assessment": result.assessment_id,
-            "student": result.student_id,
-        }
-        current_values = {
-            "organization": self.organization_id,
-            "branch": self.branch_id,
-            "section": self.section_id,
-            "assessment": self.assessment_id,
-            "student": self.student_id,
-        }
+        if self.assessment_id and self.student_id:
+            if self.student.branch_id != self.assessment.branch_id:
+                errors["student"] = _(
+                    "Student must belong to the same branch as the assessment.",
+                )
+            if self.student.organization_id != self.assessment.organization_id:
+                errors["student"] = _(
+                    "Student must belong to the same organization as the assessment.",
+                )
+            if self.student.current_section_id != self.assessment.teacher_assignment.section_id:
+                errors["student"] = _(
+                    "Student must belong to the assessment's section.",
+                )
 
-        for field_name, expected_value in comparisons.items():
-            current_value = current_values[field_name]
-            if current_value is not None and current_value != expected_value:
-                errors[field_name] = _(
-                    "This value must match the linked assessment result.",
+        if self.organization_id and self.assessment_id:
+            if self.organization_id != self.assessment.organization_id:
+                errors["organization"] = _(
+                    "Organization must match the assessment organization.",
+                )
+
+        if self.branch_id and self.assessment_id:
+            if self.branch_id != self.assessment.branch_id:
+                errors["branch"] = _("Branch must match the assessment branch.")
+
+        if self.section_id and self.assessment_id:
+            if self.section_id != self.assessment.teacher_assignment.section_id:
+                errors["section"] = _(
+                    "Section must match the assessment section.",
                 )
 
         if errors:
