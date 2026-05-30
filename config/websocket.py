@@ -1,13 +1,5 @@
-async def websocket_application(scope, receive, send):
-    while True:
-        event = await receive()
+from channels.auth import AuthMiddlewareStack
+from channels.routing import URLRouter
+from messaging.routing import websocket_urlpatterns
 
-        if event["type"] == "websocket.connect":
-            await send({"type": "websocket.accept"})
-
-        if event["type"] == "websocket.disconnect":
-            break
-
-        if event["type"] == "websocket.receive":
-            if event["text"] == "ping":
-                await send({"type": "websocket.send", "text": "pong!"})
+websocket_application = AuthMiddlewareStack(URLRouter(websocket_urlpatterns))

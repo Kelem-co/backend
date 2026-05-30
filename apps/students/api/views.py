@@ -1,5 +1,6 @@
 import secrets
 
+from accounts.email import ParentInvitationEmail
 from accounts.models import User
 from accounts.services import create_invitation_link
 from accounts.sms import send_parent_invitation_sms
@@ -27,7 +28,8 @@ from students.models import ParentStudentLink
 from students.models import Student
 from students.models import StudentAcademicYearSection
 
-from core.api.access import scope_queryset_for_user
+from core.api.access import scope_parent_link_queryset_for_user
+from core.api.access import scope_parent_queryset_for_user
 from core.api.access import scope_student_queryset_for_user
 from core.api.access import user_can_access_branch
 from core.api.access import user_can_access_parent
@@ -181,6 +183,34 @@ PARENT_BY_ORGANIZATION_PARAMETERS = [
     ),
 ]
 
+PARENT_LINK_LIST_PARAMETERS = [
+    OpenApiParameter(
+        name="student",
+        type=OpenApiTypes.UUID,
+        location=OpenApiParameter.QUERY,
+        description="Filter by student id.",
+    ),
+    OpenApiParameter(
+        name="parent",
+        type=OpenApiTypes.UUID,
+        location=OpenApiParameter.QUERY,
+        description="Filter by parent id.",
+    ),
+    OpenApiParameter(
+        name="relationship_type",
+        type=OpenApiTypes.STR,
+        location=OpenApiParameter.QUERY,
+        enum=[choice for choice, _label in ParentStudentLink.Relationship.choices],
+        description="Filter by relationship type.",
+    ),
+    OpenApiParameter(
+        name="is_primary_contact",
+        type=OpenApiTypes.BOOL,
+        location=OpenApiParameter.QUERY,
+        description="Filter by primary contact flag.",
+    ),
+]
+
 
 @extend_schema_view(
     list=extend_schema(parameters=STUDENT_LIST_PARAMETERS),
@@ -231,6 +261,12 @@ class StudentViewSet(viewsets.ModelViewSet):
             "branch",
             "organization",
             "photo",
+        ).prefetch_related(
+            Prefetch(
+                "parent_links",
+                queryset=ParentStudentLink.objects.select_related("parent__user"),
+                to_attr="prefetched_parent_links",
+            ),
         )
 
     def _apply_academic_year_filters(self, queryset, academic_year_id):
@@ -456,12 +492,7 @@ class ParentViewSet(viewsets.ModelViewSet):
         if getattr(self, "swagger_fake_view", False):
             return qs.none()
 
-        qs = scope_queryset_for_user(
-            qs,
-            self.request.user,
-            organization_lookup="organizations",
-            branch_lookup="branches",
-        )
+        qs = scope_parent_queryset_for_user(qs, self.request.user)
         params = self.request.query_params
         if params.get("organization"):
             qs = qs.filter(organizations__id=params["organization"])
@@ -560,7 +591,11 @@ class ParentViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         qs = self.filter_queryset(self.get_queryset().filter(branches__id=branch_id))
-        serializer = ParentReadSerializer(qs, many=True)
+        serializer = ParentReadSerializer(
+            qs,
+            many=True,
+            context={"request": request},
+        )
         return Response(serializer.data)
 
     @action(detail=False, methods=["get"], url_path="by-organization")
@@ -575,7 +610,11 @@ class ParentViewSet(viewsets.ModelViewSet):
         qs = self.filter_queryset(
             self.get_queryset().filter(organizations__id=organization_id),
         )
-        serializer = ParentReadSerializer(qs, many=True)
+        serializer = ParentReadSerializer(
+            qs,
+            many=True,
+            context={"request": request},
+        )
         return Response(serializer.data)
 
     @action(detail=True, methods=["get"], url_path="branches")
@@ -621,7 +660,9 @@ class ParentViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        return Response(ParentReadSerializer(parent).data)
+        return Response(
+            ParentReadSerializer(parent, context={"request": request}).data,
+        )
 
     @action(detail=False, methods=["get"], url_path="my-students")
     def my_students(self, request):
@@ -645,6 +686,9 @@ class ParentViewSet(viewsets.ModelViewSet):
         return Response(StudentReadSerializer(students, many=True).data)
 
 
+@extend_schema_view(
+    list=extend_schema(parameters=PARENT_LINK_LIST_PARAMETERS),
+)
 class ParentStudentLinkViewSet(viewsets.ModelViewSet):
     """
     CRUD for parent-student relationships.
@@ -670,12 +714,25 @@ class ParentStudentLinkViewSet(viewsets.ModelViewSet):
         if getattr(self, "swagger_fake_view", False):
             return self.queryset.none()
 
-        return scope_queryset_for_user(
-            self.queryset,
-            self.request.user,
-            organization_lookup="parent__organizations",
-            branch_lookup="parent__branches",
-        )
+        qs = scope_parent_link_queryset_for_user(self.queryset, self.request.user)
+        params = self.request.query_params
+        if params.get("student"):
+            qs = qs.filter(student_id=params["student"])
+        if params.get("parent"):
+            qs = qs.filter(parent_id=params["parent"])
+        if params.get("relationship_type"):
+            qs = qs.filter(
+                relationship_type=params["relationship_type"].upper(),
+            )
+        if params.get("is_primary_contact") is not None:
+            is_primary_contact = params["is_primary_contact"].lower() in (
+                "true",
+                "1",
+                "yes",
+            )
+            qs = qs.filter(is_primary_contact=is_primary_contact)
+
+        return qs.distinct()
 
     def get_serializer_class(self):
         if self.action in ["list", "retrieve"]:
@@ -704,7 +761,7 @@ class ParentInviteView(APIView):
             existing_user = data.get("existing_user")
             if existing_user is None:
                 user = User.objects.create_user(
-                    email=None,
+                    email=data.get("email") or None,
                     password=random_password,
                     name=data["name"],
                     father_name=data["father_name"],
@@ -729,6 +786,7 @@ class ParentInviteView(APIView):
                 user.father_name = data["father_name"]
                 user.grandfather_name = data["grandfather_name"]
                 user.phone_number = data["phone_number"]
+                user.email = data.get("email") or None
                 user.role = User.Role.PARENT
                 user.is_active = False
                 user.verified_at = None
@@ -739,6 +797,7 @@ class ParentInviteView(APIView):
                         "father_name",
                         "grandfather_name",
                         "phone_number",
+                        "email",
                         "role",
                         "is_active",
                         "verified_at",
@@ -792,6 +851,17 @@ class ParentInviteView(APIView):
                 sms_sent = True
             except (RuntimeError, ValueError, TypeError) as exc:
                 sms_error = str(exc)
+            email_obj = ParentInvitationEmail(
+                request,
+                context={
+                    "user": user,
+                    "branch_name": branch.name,
+                    "invited_by": request.user.name,
+                    "url": invitation_link.path,
+                },
+            )
+            if user.email:
+                email_obj.send([user.email])
 
             response_data = {
                 "message": "Parent invitation sent successfully.",

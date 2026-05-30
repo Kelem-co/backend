@@ -151,6 +151,38 @@ def scope_intervention_queryset_for_user(queryset: QuerySet, user: Any) -> Query
     return queryset.filter(access_filter).distinct()
 
 
+def scope_parent_queryset_for_user(queryset: QuerySet, user: Any) -> QuerySet:
+    access_filter = user_resource_access_filter(
+        user,
+        organization_lookup="organizations",
+        branch_lookup="branches",
+    )
+
+    if getattr(user, "is_authenticated", False):
+        access_filter |= teacher_section_access_filter(
+            user,
+            section_lookup="student_links__student__current_section",
+        )
+
+    return queryset.filter(access_filter).distinct()
+
+
+def scope_parent_link_queryset_for_user(queryset: QuerySet, user: Any) -> QuerySet:
+    access_filter = user_resource_access_filter(
+        user,
+        organization_lookup="parent__organizations",
+        branch_lookup="parent__branches",
+    )
+
+    if getattr(user, "is_authenticated", False):
+        access_filter |= teacher_section_access_filter(
+            user,
+            section_lookup="student__current_section",
+        )
+
+    return queryset.filter(access_filter).distinct()
+
+
 def user_resource_access_filter(
     user: Any,
     *,

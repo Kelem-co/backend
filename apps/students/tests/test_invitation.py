@@ -23,8 +23,14 @@ class TestParentInviteView:
     def api_rf(self) -> APIRequestFactory:
         return APIRequestFactory()
 
+    @patch("students.api.views.ParentInvitationEmail.send")
     @patch("students.api.views.send_parent_invitation_sms")
-    def test_invite_success(self, mock_send_sms, api_rf: APIRequestFactory):
+    def test_invite_success(
+        self,
+        mock_send_sms,
+        mock_send_email,
+        api_rf: APIRequestFactory,
+    ):
         user = UserFactory()
         branch = BranchFactory(school__organization__owner=user)
 
@@ -36,6 +42,7 @@ class TestParentInviteView:
                 "father_name": "Parent",
                 "grandfather_name": "Test",
                 "phone_number": "+251911111201",
+                "email": "parent1@example.com",
                 "branch": branch.id,
             },
         )
@@ -57,11 +64,14 @@ class TestParentInviteView:
         assert branch.organization in parent.organizations.all()
         assert branch in parent.branches.all()
         mock_send_sms.assert_called_once()
+        mock_send_email.assert_called_once()
 
+    @patch("students.api.views.ParentInvitationEmail.send")
     @patch("students.api.views.send_parent_invitation_sms")
     def test_reinvite_updates_existing_inactive_parent(
         self,
         mock_send_sms,
+        mock_send_email,
         api_rf: APIRequestFactory,
     ):
         owner = UserFactory()
@@ -92,6 +102,7 @@ class TestParentInviteView:
                 "grandfather_name": "Profile",
                 "phone_number": "+251911111202",
                 "occupation": "Engineer",
+                "email": "parent2@example.com",
                 "branch": new_branch.id,
             },
         )
@@ -111,6 +122,7 @@ class TestParentInviteView:
         assert list(parent.organizations.all()) == [new_branch.organization]
         assert list(parent.branches.all()) == [new_branch]
         mock_send_sms.assert_called_once()
+        mock_send_email.assert_called_once()
 
     def test_invite_rejects_existing_active_parent(self, api_rf: APIRequestFactory):
         owner = UserFactory()

@@ -12,9 +12,11 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.filters import SearchFilter
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from students.models import Student
 
 from core.api.access import scope_attendance_queryset_for_user
 from core.api.access import scope_queryset_for_user
+from core.api.access import scope_student_queryset_for_user
 from core.api.access import user_can_access_student_as_parent_or_staff
 from core.api.access import user_can_manage_attendance
 from core.api.access import user_resource_access_filter
@@ -481,11 +483,11 @@ class AttendanceSummaryViewSet(viewsets.ReadOnlyModelViewSet):
         if getattr(self, "swagger_fake_view", False):
             return qs.none()
 
-        qs = scope_queryset_for_user(
-            qs,
+        student_ids = scope_student_queryset_for_user(
+            Student.objects.all(),
             self.request.user,
-            branch_lookup="student__branch",
-        )
+        ).values_list("id", flat=True)
+        qs = qs.filter(student_id__in=student_ids)
         p = self.request.query_params
         if p.get("organization"):
             qs = qs.filter(organization_id=p["organization"])

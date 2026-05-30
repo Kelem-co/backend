@@ -11,6 +11,20 @@ License: MIT
 
 Moved to [settings](https://cookiecutter-django.readthedocs.io/en/latest/1-getting-started/settings.html).
 
+### SMS Backend (Telerivet)
+
+Parent OTP (`/auth/otp/request/`) and parent invitation (`/api/parents/invite/`)
+use the configured SMS backend. To use Telerivet:
+
+```
+SMS_BACKEND=accounts.sms_backends.TelerivetSMSBackend
+TELERIVET_API_KEY=your_telerivet_api_key
+TELERIVET_PROJECT_ID=your_telerivet_project_id
+TELERIVET_TIMEOUT_SECONDS=10
+```
+
+Phone numbers should be provided in international format, e.g. `+2519XXXXXXXX`.
+
 ## Basic Commands
 
 ### Setting Up Your Users
@@ -124,3 +138,9 @@ The following details how to deploy this application.
 ### Docker
 
 See detailed [cookiecutter-django Docker documentation](https://cookiecutter-django.readthedocs.io/en/latest/3-deployment/deployment-with-docker.html).
+
+Production now includes a MinIO service for the multipart media upload flow. Set
+`S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_BUCKET`, `S3_REGION`,
+`S3_INTERNAL_ENDPOINT`, and `S3_PUBLIC_ENDPOINT` in
+`.envs/.production/.django`, and point the `uploads.kelem.app` DNS record at the
+same Traefik entrypoint as `api.kelem.app`.

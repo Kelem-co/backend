@@ -259,6 +259,7 @@ class StudentReadSerializer(StudentSerializer):
         source="organization.name",
         read_only=True,
     )
+    parent_details = serializers.SerializerMethodField()
 
     class Meta(StudentSerializer.Meta):
         fields = [
@@ -271,7 +272,17 @@ class StudentReadSerializer(StudentSerializer):
             "academic_year_name",
             "branch_name",
             "organization_name",
+            "parent_details",
         ]
+
+    @staticmethod
+    def _format_parent_full_name(parent: Parent) -> str:
+        user = parent.user
+        return " ".join(
+            part
+            for part in [user.name, user.father_name, user.grandfather_name]
+            if part
+        )
 
     def _get_requested_assignment(self, obj) -> StudentAcademicYearSection | None:
         request = self.context.get("request")
@@ -340,6 +351,22 @@ class StudentReadSerializer(StudentSerializer):
     def get_academic_year_name(self, obj) -> str | None:
         academic_year = self._get_academic_year_for_response(obj)
         return academic_year.name if academic_year else None
+
+    def get_parent_details(self, obj) -> list[dict[str, str | bool | None]]:
+        parent_links = getattr(obj, "prefetched_parent_links", None)
+        if parent_links is None:
+            parent_links = obj.parent_links.select_related("parent__user")
+
+        return [
+            {
+                "id": str(link.parent_id),
+                "user": str(link.parent.user_id),
+                "full_name": self._format_parent_full_name(link.parent),
+                "relationship_type": link.relationship_type,
+                "is_primary_contact": link.is_primary_contact,
+            }
+            for link in parent_links
+        ]
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -509,6 +536,31 @@ class ParentReadSerializer(ParentSerializer):
             "student_details",
         ]
 
+    def _request_user_can_view_phone_numbers(self, obj: Parent) -> bool:
+        request = self.context.get("request")
+        if request is None:
+            return True
+
+        user = request.user
+        if not getattr(user, "is_authenticated", False):
+            return False
+
+        if user.is_superuser or obj.user_id == user.id:
+            return True
+
+        if obj.organizations.filter(owner=user).exists():
+            return True
+
+        if obj.branches.filter(
+            admins__user=user,
+            admins__status="ACTIVE",
+        ).exists():
+            return True
+
+        return obj.student_links.filter(
+            student__current_section__homeroom_assignments__teacher__user=user,
+        ).exists()
+
     def get_organization_details(self, obj) -> list[dict]:
         return [
             {
@@ -545,12 +597,26 @@ class ParentReadSerializer(ParentSerializer):
             for link in obj.student_links.select_related("student")
         ]
 
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if self._request_user_can_view_phone_numbers(instance):
+            return data
+
+        user_details = data.get("user_details")
+        if isinstance(user_details, dict):
+            user_details["phone_number"] = None
+
+        data["secondary_phone_number"] = None
+        data["emergency_contact_phone"] = None
+        return data
+
 
 class ParentInviteSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=255)
     father_name = serializers.CharField(max_length=255)
     grandfather_name = serializers.CharField(max_length=255)
     phone_number = serializers.CharField(max_length=20)
+    email = serializers.EmailField(required=False, allow_blank=True, default="")
     branch = serializers.PrimaryKeyRelatedField(queryset=Branch.objects.all())
     secondary_phone_number = serializers.CharField(
         max_length=20,
@@ -590,6 +656,40 @@ class ParentInviteSerializer(serializers.Serializer):
 
     PHONE_VALIDATION_ERROR_MESSAGE = "A parent with this phone number already exists."
 
+    @staticmethod
+    def _normalize_optional_phone(attrs: dict, field_name: str) -> None:
+        value = attrs.get(field_name, "")
+        if not value:
+            return
+        try:
+            attrs[field_name] = normalize_phone_number(value)
+        except ValueError as err:
+            raise ValidationError({field_name: str(err)}) from err
+
+    def _validate_existing_user(self, attrs: dict) -> User | None:
+        existing_user = User.objects.filter(phone_number=attrs["phone_number"]).first()
+        if existing_user is None:
+            return None
+
+        if existing_user.role != User.Role.PARENT or existing_user.is_active:
+            raise ValidationError({"phone_number": self.PHONE_VALIDATION_ERROR_MESSAGE})
+        if not Parent.objects.filter(user=existing_user).exists():
+            raise ValidationError({"phone_number": self.PHONE_VALIDATION_ERROR_MESSAGE})
+        attrs["existing_user"] = existing_user
+        return existing_user
+
+    @staticmethod
+    def _validate_email_conflict(email: str, existing_user: User | None) -> None:
+        if not email:
+            return
+        email_conflict = User.objects.filter(email__iexact=email)
+        if existing_user is not None:
+            email_conflict = email_conflict.exclude(pk=existing_user.pk)
+        if email_conflict.exists():
+            raise ValidationError(
+                {"email": "A user with this email already exists."},
+            )
+
     def validate(self, attrs):
         request = self.context.get("request")
         branch = attrs["branch"]
@@ -599,35 +699,13 @@ class ParentInviteSerializer(serializers.Serializer):
         except ValueError as err:
             raise ValidationError({"phone_number": str(err)}) from err
 
-        secondary_phone = attrs.get("secondary_phone_number", "")
-        if secondary_phone:
-            try:
-                attrs["secondary_phone_number"] = normalize_phone_number(
-                    secondary_phone,
-                )
-            except ValueError as err:
-                raise ValidationError({"secondary_phone_number": str(err)}) from err
+        self._normalize_optional_phone(attrs, "secondary_phone_number")
+        self._normalize_optional_phone(attrs, "emergency_contact_phone")
+        existing_user = self._validate_existing_user(attrs)
 
-        emergency_phone = attrs.get("emergency_contact_phone", "")
-        if emergency_phone:
-            try:
-                attrs["emergency_contact_phone"] = normalize_phone_number(
-                    emergency_phone,
-                )
-            except ValueError as err:
-                raise ValidationError({"emergency_contact_phone": str(err)}) from err
-
-        existing_user = User.objects.filter(phone_number=attrs["phone_number"]).first()
-        if existing_user is not None:
-            if existing_user.role != User.Role.PARENT or existing_user.is_active:
-                raise ValidationError(
-                    {"phone_number": self.PHONE_VALIDATION_ERROR_MESSAGE},
-                )
-            if not Parent.objects.filter(user=existing_user).exists():
-                raise ValidationError(
-                    {"phone_number": self.PHONE_VALIDATION_ERROR_MESSAGE},
-                )
-            attrs["existing_user"] = existing_user
+        email = attrs.get("email", "").strip()
+        attrs["email"] = email
+        self._validate_email_conflict(email, existing_user)
 
         if request and not user_can_access_branch(request.user, branch):
             raise ValidationError(

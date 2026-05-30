@@ -71,6 +71,12 @@ variable "user_data_template_vars" {
   default     = {}
 }
 
+variable "user_data_template_file" {
+  description = "Path to the user data template file, relative to the module directory."
+  type        = string
+  default     = "templates/user_data.sh.tftpl"
+}
+
 variable "volume_size" {
   type        = number
   description = "Size in GiB for the root EBS volume attached to instances"
