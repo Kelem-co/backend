@@ -719,7 +719,7 @@ class ParentInviteView(APIView):
                     relationship_notes=data.get("relationship_notes", ""),
                     emergency_contact_name=data.get("emergency_contact_name", ""),
                     emergency_contact_phone=data.get("emergency_contact_phone", ""),
-                    is_active=True,
+                    is_active=False,
                 )
             else:
                 user = existing_user
@@ -754,7 +754,7 @@ class ParentInviteView(APIView):
                     "emergency_contact_phone",
                     "",
                 )
-                parent.is_active = True
+                parent.is_active = False
                 parent.save(
                     update_fields=[
                         "secondary_phone_number",
