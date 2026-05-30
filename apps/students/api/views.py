@@ -698,6 +698,8 @@ class ParentInviteView(APIView):
         branch: Branch = data["branch"]
 
         with transaction.atomic():
+            sms_sent = False
+            sms_error = ""
             random_password = secrets.token_urlsafe(16)
             existing_user = data.get("existing_user")
             if existing_user is None:
@@ -782,18 +784,27 @@ class ParentInviteView(APIView):
                 user=user,
                 path_template="complete-parent-invitation/{uid}/{token}",
             )
-            send_parent_invitation_sms(
-                phone_number=user.phone_number or "",
-                invitation_url=invitation_link.full_url,
-            )
+            try:
+                send_parent_invitation_sms(
+                    phone_number=user.phone_number or "",
+                    invitation_url=invitation_link.full_url,
+                )
+                sms_sent = True
+            except (RuntimeError, ValueError, TypeError) as exc:
+                sms_error = str(exc)
 
-        return Response(
-            {
+            response_data = {
                 "message": "Parent invitation sent successfully.",
                 "invitation_url": invitation_link.full_url,
-            },
-            status=status.HTTP_201_CREATED,
-        )
+                "sms_sent": sms_sent,
+            }
+            if sms_error:
+                response_data["sms_error"] = sms_error
+
+            return Response(
+                response_data,
+                status=status.HTTP_201_CREATED,
+            )
 
 
 @extend_schema(request=ParentCompleteInvitationSerializer)
