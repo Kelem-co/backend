@@ -59,6 +59,7 @@ class TestParentInviteView:
         assert parent_user.is_active is False
 
         parent = Parent.objects.get(user=parent_user)
+        assert parent.is_active is False
         assert branch.organization in parent.organizations.all()
         assert branch in parent.branches.all()
         mock_send_sms.assert_called_once()
@@ -115,7 +116,7 @@ class TestParentInviteView:
         assert user.name == "Updated"
         assert user.is_active is False
         assert parent.occupation == "Engineer"
-        assert parent.is_active is True
+        assert parent.is_active is False
         assert list(parent.organizations.all()) == [new_branch.organization]
         assert list(parent.branches.all()) == [new_branch]
         mock_send_sms.assert_called_once()
