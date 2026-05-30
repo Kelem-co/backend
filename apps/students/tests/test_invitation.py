@@ -53,6 +53,7 @@ class TestParentInviteView:
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["message"] == "Parent invitation sent successfully."
         assert "/complete-parent-invitation/" in response.data["invitation_url"]
+        assert response.data["sms_sent"] is True
 
         parent_user = User.objects.get(phone_number="+251911111201")
         assert parent_user.role == User.Role.PARENT
@@ -110,6 +111,7 @@ class TestParentInviteView:
         response = view(request)
 
         assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["sms_sent"] is True
         user.refresh_from_db()
         parent.refresh_from_db()
         assert User.objects.filter(phone_number="+251911111202").count() == 1
@@ -207,11 +209,13 @@ class TestParentInviteView:
         )
         request.user = owner
 
-        with pytest.raises(RuntimeError, match="boom"):
-            view(request)
+        response = view(request)
 
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["sms_sent"] is False
+        assert response.data["sms_error"] == "boom"
         assert mock_send_sms.called
-        assert not User.objects.filter(phone_number="+251911111205").exists()
+        assert User.objects.filter(phone_number="+251911111205").exists()
 
     def test_invite_allows_active_branch_admin_for_own_branch(
         self,
