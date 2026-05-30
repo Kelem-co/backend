@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import timedelta
 from http import HTTPStatus
 from unittest.mock import patch
+from uuid import uuid4
 
 import pytest
 from accounts.models import ParentLoginOTP
@@ -67,7 +68,43 @@ def test_parent_otp_verify_returns_tokens(
 
     assert response.status_code == HTTPStatus.OK
     assert "access" in response.data
-    assert "refresh" in response.data
+    assert "refresh" not in response.data
+    assert "refresh_token" in response.cookies
+
+
+@pytest.mark.django_db
+def test_jwt_refresh_uses_cookie(
+    api_client: APIClient,
+    active_parent_user: User,
+):
+    otp_code = create_parent_login_otp(user=active_parent_user)
+    verify_response = api_client.post(
+        "/auth/otp/verify/",
+        {
+            "phone_number": active_parent_user.phone_number,
+            "otp_code": otp_code,
+        },
+        format="json",
+    )
+    assert verify_response.status_code == HTTPStatus.OK
+    assert "refresh_token" in verify_response.cookies
+
+    refresh_cookie = verify_response.cookies["refresh_token"].value
+    api_client.cookies["refresh_token"] = refresh_cookie
+    refresh_response = api_client.post("/auth/jwt/refresh/", {}, format="json")
+    assert refresh_response.status_code == HTTPStatus.OK
+    assert "access" in refresh_response.data
+
+
+@pytest.mark.django_db
+def test_logout_clears_refresh_cookie(
+    api_client: APIClient,
+):
+    api_client.cookies["refresh_token"] = str(uuid4())
+    response = api_client.post("/auth/logout/", {}, format="json")
+    assert response.status_code == HTTPStatus.OK
+    assert "refresh_token" in response.cookies
+    assert response.cookies["refresh_token"]["max-age"] == 0
 
 
 @pytest.mark.django_db

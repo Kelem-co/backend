@@ -442,10 +442,41 @@ SIMPLE_JWT = {
 
 
 # django-cors-headers - https://github.com/adamchainz/django-cors-headers#setup
+# Origins must be full scheme+host(+port), not URL paths.
+CORS_ALLOWED_ORIGINS = env.list(
+    "CORS_ALLOWED_ORIGINS",
+    default=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3001",
+    ],
+)
 CORS_ALLOWED_ORIGIN_REGEXES = [
-    r"^/api/.*$",
-    r"^/auth/.*$",
+    r"^https?://localhost(?::\d+)?$",
+    r"^https?://127\.0\.0\.1(?::\d+)?$",
 ]
+CORS_ALLOW_CREDENTIALS = True
+CSRF_TRUSTED_ORIGINS = env.list(
+    "CSRF_TRUSTED_ORIGINS",
+    default=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3001",
+    ],
+)
+
+# JWT refresh cookie settings (cross-origin compatible defaults for local dev)
+JWT_REFRESH_COOKIE_NAME = env("JWT_REFRESH_COOKIE_NAME", default="refresh_token")
+JWT_REFRESH_COOKIE_PATH = env("JWT_REFRESH_COOKIE_PATH", default="/auth/jwt/")
+JWT_REFRESH_COOKIE_DOMAIN = env("JWT_REFRESH_COOKIE_DOMAIN", default=None)
+JWT_REFRESH_COOKIE_SECURE = env.bool("JWT_REFRESH_COOKIE_SECURE", default=False)
+JWT_REFRESH_COOKIE_HTTPONLY = env.bool("JWT_REFRESH_COOKIE_HTTPONLY", default=True)
+JWT_REFRESH_COOKIE_SAMESITE = env(
+    "JWT_REFRESH_COOKIE_SAMESITE",
+    default="Lax",
+)
 # By Default swagger ui is available only to admin user(s). You can change permission classes to change that
 # See more configuration options at https://drf-spectacular.readthedocs.io/en/latest/settings.html#settings
 SPECTACULAR_SETTINGS = {

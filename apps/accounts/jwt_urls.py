@@ -1,10 +1,11 @@
+from accounts.jwt_views import CookieTokenRefreshView
+from accounts.jwt_views import LogoutView
 from accounts.jwt_views import OrganizationApprovalMagicLinkExchangeView
 from accounts.jwt_views import OrganizationAwareTokenObtainPairView
 from accounts.jwt_views import ParentOTPRequestView
 from accounts.jwt_views import ParentOTPVerifyView
 from django.urls import path
 from django.urls import re_path
-from rest_framework_simplejwt.views import TokenRefreshView
 from rest_framework_simplejwt.views import TokenVerifyView
 
 urlpatterns = [
@@ -28,6 +29,7 @@ urlpatterns = [
         ParentOTPVerifyView.as_view(),
         name="parent-otp-verify",
     ),
-    re_path(r"^jwt/refresh/?", TokenRefreshView.as_view(), name="jwt-refresh"),
+    re_path(r"^jwt/refresh/?", CookieTokenRefreshView.as_view(), name="jwt-refresh"),
     re_path(r"^jwt/verify/?", TokenVerifyView.as_view(), name="jwt-verify"),
+    path("logout/", LogoutView.as_view(), name="logout"),
 ]

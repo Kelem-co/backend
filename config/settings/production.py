@@ -236,3 +236,5 @@ SPECTACULAR_SETTINGS["SERVERS"] = [
 ]
 # Your stuff...
 # ------------------------------------------------------------------------------
+JWT_REFRESH_COOKIE_SECURE = True
+JWT_REFRESH_COOKIE_SAMESITE = "None"

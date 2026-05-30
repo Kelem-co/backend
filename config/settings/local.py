@@ -72,4 +72,6 @@ INSTALLED_APPS += ["django_extensions"]
 CELERY_TASK_EAGER_PROPAGATES = True
 # Your stuff...
 # ------------------------------------------------------------------------------
-CORS_ALLOW_ALL_ORIGINS = True
+# Keep explicit origin allowlist behavior from base settings so
+# credentialed cross-origin requests (with cookies/auth) work correctly.
+CORS_ALLOW_ALL_ORIGINS = False

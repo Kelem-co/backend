@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from http import HTTPStatus
 from typing import TYPE_CHECKING
 from typing import Self
@@ -8,7 +9,9 @@ from urllib import error
 from urllib import request
 
 import pytest
+from django.conf import settings
 from django.test import Client
+from django.test import override_settings
 from django.urls import reverse
 
 from core.mcp_backend_docs.openapi import OpenAPISchemaLoader
@@ -23,6 +26,9 @@ if TYPE_CHECKING:
 
 
 SCHEMA_TIMEOUT_SECONDS = 5.0
+_NO_THROTTLE_SETTINGS = deepcopy(settings.REST_FRAMEWORK)
+_NO_THROTTLE_SETTINGS["DEFAULT_THROTTLE_CLASSES"] = []
+_NO_THROTTLE_SETTINGS["DEFAULT_THROTTLE_RATES"] = {}
 
 
 class _FakeResponse:
@@ -48,6 +54,7 @@ def _post_mcp_message(client: Client, payload: dict[str, object]) -> object:
 
 
 @pytest.mark.django_db
+@override_settings(REST_FRAMEWORK=_NO_THROTTLE_SETTINGS)
 def test_openapi_resource_exposes_live_schema_from_backend(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -101,6 +108,7 @@ def test_network_mcp_endpoint_supports_initialize() -> None:
 
 
 @pytest.mark.django_db
+@override_settings(REST_FRAMEWORK=_NO_THROTTLE_SETTINGS)
 def test_network_mcp_endpoint_reads_resource(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -134,6 +142,7 @@ def test_network_mcp_endpoint_reads_resource(
 
 
 @pytest.mark.django_db
+@override_settings(REST_FRAMEWORK=_NO_THROTTLE_SETTINGS)
 def test_api_summary_contains_expected_fields_from_schema() -> None:
     schema_response = Client().get(f"{reverse('api-schema')}?format=json")
     assert schema_response.status_code == HTTPStatus.OK
