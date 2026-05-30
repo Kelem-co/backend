@@ -11,6 +11,8 @@ echo "Bootstrapping node $${INSTANCE_NAME}"
 log() { echo "[user-data] $(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$@"; }
 
 DEFAULT_LOGIN_USER="${DEFAULT_LOGIN_USER}"
+SWAP_FILE="/swapfile"
+SWAP_SIZE_MIB="${SWAP_SIZE_MIB}"
 
 retry() {
   local attempts="$1"
@@ -84,6 +86,42 @@ install_aws_cli() {
   fi
 }
 
+ensure_swap() {
+  if [ "$${SWAP_SIZE_MIB}" -le 0 ]; then
+    log "Skipping swap setup because SWAP_SIZE_MIB is not positive"
+    return 0
+  fi
+
+  if swapon --noheadings --show=NAME 2>/dev/null | grep -Fxq "$${SWAP_FILE}"; then
+    log "Swap file already active at $${SWAP_FILE}"
+  else
+    if [ ! -f "$${SWAP_FILE}" ]; then
+      log "Creating $${SWAP_SIZE_MIB} MiB swap file at $${SWAP_FILE}"
+      if ! fallocate -l "$${SWAP_SIZE_MIB}M" "$${SWAP_FILE}"; then
+        log "fallocate failed, falling back to dd"
+        dd if=/dev/zero of="$${SWAP_FILE}" bs=1M count="$${SWAP_SIZE_MIB}" status=none
+      fi
+    else
+      log "Reusing existing swap file at $${SWAP_FILE}"
+    fi
+
+    chmod 600 "$${SWAP_FILE}"
+    mkswap "$${SWAP_FILE}"
+
+    if ! grep -Fq "$${SWAP_FILE} none swap sw 0 0" /etc/fstab; then
+      log "Persisting swap file in /etc/fstab"
+      echo "$${SWAP_FILE} none swap sw 0 0" >> /etc/fstab
+    fi
+
+    log "Activating swap file"
+    swapon "$${SWAP_FILE}"
+  fi
+
+  log "Swap status:"
+  swapon --show || true
+  free -h || true
+}
+
 show_service_status() {
   log "Bootstrap complete. Services:"
   systemctl status docker --no-pager || true
@@ -97,6 +135,7 @@ export DEBIAN_FRONTEND=noninteractive
 install_prerequisites
 install_docker
 install_aws_cli
+ensure_swap
 show_service_status
 
 exit 0
