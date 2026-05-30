@@ -744,7 +744,7 @@ class ParentStudentLinkViewSet(viewsets.ModelViewSet):
 class ParentInviteView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def post(self, request):
+    def post(self, request):  # noqa: PLR0915
         serializer = ParentInviteSerializer(
             data=request.data,
             context={"request": request},
