@@ -261,6 +261,12 @@ class StudentViewSet(viewsets.ModelViewSet):
             "branch",
             "organization",
             "photo",
+        ).prefetch_related(
+            Prefetch(
+                "parent_links",
+                queryset=ParentStudentLink.objects.select_related("parent__user"),
+                to_attr="prefetched_parent_links",
+            ),
         )
 
     def _apply_academic_year_filters(self, queryset, academic_year_id):
@@ -585,7 +591,11 @@ class ParentViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         qs = self.filter_queryset(self.get_queryset().filter(branches__id=branch_id))
-        serializer = ParentReadSerializer(qs, many=True)
+        serializer = ParentReadSerializer(
+            qs,
+            many=True,
+            context={"request": request},
+        )
         return Response(serializer.data)
 
     @action(detail=False, methods=["get"], url_path="by-organization")
@@ -600,7 +610,11 @@ class ParentViewSet(viewsets.ModelViewSet):
         qs = self.filter_queryset(
             self.get_queryset().filter(organizations__id=organization_id),
         )
-        serializer = ParentReadSerializer(qs, many=True)
+        serializer = ParentReadSerializer(
+            qs,
+            many=True,
+            context={"request": request},
+        )
         return Response(serializer.data)
 
     @action(detail=True, methods=["get"], url_path="branches")
@@ -646,7 +660,9 @@ class ParentViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        return Response(ParentReadSerializer(parent).data)
+        return Response(
+            ParentReadSerializer(parent, context={"request": request}).data,
+        )
 
     @action(detail=False, methods=["get"], url_path="my-students")
     def my_students(self, request):

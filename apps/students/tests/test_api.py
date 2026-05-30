@@ -329,6 +329,48 @@ class TestStudentsAPI:
             section=section,
         ).exists()
 
+    def test_student_read_includes_parent_full_name(
+        self,
+        api_client,
+        user,
+        organization,
+        branch,
+        section,
+    ):
+        api_client.force_authenticate(user=user)
+        student = StudentFactory(
+            organization=organization,
+            branch=branch,
+            current_section=section,
+        )
+        parent = ParentFactory(
+            organizations=[organization],
+            branches=[branch],
+        )
+        parent.user.name = "Rahel"
+        parent.user.father_name = "Bekele"
+        parent.user.grandfather_name = "Mekonnen"
+        parent.user.save(update_fields=["name", "father_name", "grandfather_name"])
+        ParentStudentLinkFactory(
+            student=student,
+            parent=parent,
+            relationship_type="MOTHER",
+            is_primary_contact=True,
+        )
+
+        response = api_client.get(f"/api/students/{student.id}/")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["parent_details"] == [
+            {
+                "id": str(parent.id),
+                "user": str(parent.user_id),
+                "full_name": "Rahel Bekele Mekonnen",
+                "relationship_type": "MOTHER",
+                "is_primary_contact": True,
+            },
+        ]
+
     def test_student_list_by_academic_year_and_section_uses_year_scoped_mapping(
         self,
         api_client,

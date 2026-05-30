@@ -28,6 +28,8 @@ security_group_rules = [
   },
 ]
 
+user_data_template_file = "templates/user_data.localstack.sh.tftpl"
+
 user_data_template_vars = {
   INSTANCE_NAME      = "kelem-dev-instance"
   DEFAULT_LOGIN_USER = "ubuntu"

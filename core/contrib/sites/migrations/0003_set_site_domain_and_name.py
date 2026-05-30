@@ -40,7 +40,7 @@ def update_site_forward(apps, schema_editor):
     _update_or_create_site_with_sequence(
         Site,
         schema_editor.connection,
-        "api.kelem.com",
+        "api.kelem.app",
         "core",
     )
 
@@ -60,4 +60,5 @@ class Migration(migrations.Migration):
 
     dependencies = [("sites", "0002_alter_domain_unique")]
 
-    operations = [migrations.RunPython(update_site_forward, update_site_backward)]
+    operations = [migrations.RunPython(
+        update_site_forward, update_site_backward)]

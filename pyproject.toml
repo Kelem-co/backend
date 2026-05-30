@@ -8,9 +8,7 @@ version = "0.1.0"
 description = "Behold My Awesome Project!"
 readme = "README.md"
 license = { text = "MIT" }
-authors = [
-  { name = "oddegen", email = "oddegen@api.kelem.com" },
-]
+authors = [ { name = "oddegen", email = "oddegen@api.kelem.app" } ]
 requires-python = "==3.14.*"
 classifiers = [
   "Programming Language :: Python :: 3 :: Only",
@@ -84,10 +82,7 @@ packages.find.include = [ "config*", "core*" ]
 
 [tool.ruff]
 # Exclude a variety of commonly ignored directories.
-extend-exclude = [
-  "*/migrations/*.py",
-  "staticfiles/*",
-]
+extend-exclude = [ "*/migrations/*.py", "staticfiles/*" ]
 lint.select = [
   "A",
   "ASYNC",
@@ -159,10 +154,7 @@ ignore_missing_imports = true
 warn_unused_ignores = true
 warn_redundant_casts = true
 warn_unused_configs = true
-plugins = [
-  "mypy_django_plugin.main",
-  "mypy_drf_plugin.main",
-]
+plugins = [ "mypy_django_plugin.main", "mypy_drf_plugin.main" ]
 overrides = [
   # Django migrations should not produce any errors:
   { module = "*.migrations.*", ignore_errors = true },
@@ -175,10 +167,7 @@ django_settings_module = "config.settings.test"
 # ==== pytest ====
 ini_options.minversion = "6.0"
 ini_options.addopts = "--ds=config.settings.test --reuse-db --import-mode=importlib"
-ini_options.python_files = [
-  "tests.py",
-  "test_*.py",
-]
+ini_options.python_files = [ "tests.py", "test_*.py" ]
 
 [tool.coverage]
 # ==== Coverage ====

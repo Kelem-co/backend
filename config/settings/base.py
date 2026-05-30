@@ -86,7 +86,6 @@ THIRD_PARTY_APPS = [
     "rest_framework.authtoken",
     "corsheaders",
     "drf_spectacular",
-    "django_seed",
     "djoser",
     "django_filters",
 ]
@@ -300,7 +299,7 @@ ETRADE_API_USER_AGENT = env(
 # Django Admin URL.
 ADMIN_URL = "admin/"
 # https://docs.djangoproject.com/en/dev/ref/settings/#admins
-ADMINS = ['"oddegen" <oddegen@api.kelem.com>']
+ADMINS = ['"oddegen" <oddegen@api.kelem.app>']
 # https://docs.djangoproject.com/en/dev/ref/settings/#managers
 MANAGERS = ADMINS
 # https://cookiecutter-django.readthedocs.io/en/latest/settings.html#other-environment-settings

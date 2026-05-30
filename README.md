@@ -138,3 +138,9 @@ The following details how to deploy this application.
 ### Docker
 
 See detailed [cookiecutter-django Docker documentation](https://cookiecutter-django.readthedocs.io/en/latest/3-deployment/deployment-with-docker.html).
+
+Production now includes a MinIO service for the multipart media upload flow. Set
+`S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_BUCKET`, `S3_REGION`,
+`S3_INTERNAL_ENDPOINT`, and `S3_PUBLIC_ENDPOINT` in
+`.envs/.production/.django`, and point the `uploads.kelem.app` DNS record at the
+same Traefik entrypoint as `api.kelem.app`.

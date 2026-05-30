@@ -259,6 +259,7 @@ class StudentReadSerializer(StudentSerializer):
         source="organization.name",
         read_only=True,
     )
+    parent_details = serializers.SerializerMethodField()
 
     class Meta(StudentSerializer.Meta):
         fields = [
@@ -271,7 +272,17 @@ class StudentReadSerializer(StudentSerializer):
             "academic_year_name",
             "branch_name",
             "organization_name",
+            "parent_details",
         ]
+
+    @staticmethod
+    def _format_parent_full_name(parent: Parent) -> str:
+        user = parent.user
+        return " ".join(
+            part
+            for part in [user.name, user.father_name, user.grandfather_name]
+            if part
+        )
 
     def _get_requested_assignment(self, obj) -> StudentAcademicYearSection | None:
         request = self.context.get("request")
@@ -340,6 +351,22 @@ class StudentReadSerializer(StudentSerializer):
     def get_academic_year_name(self, obj) -> str | None:
         academic_year = self._get_academic_year_for_response(obj)
         return academic_year.name if academic_year else None
+
+    def get_parent_details(self, obj) -> list[dict[str, str | bool | None]]:
+        parent_links = getattr(obj, "prefetched_parent_links", None)
+        if parent_links is None:
+            parent_links = obj.parent_links.select_related("parent__user")
+
+        return [
+            {
+                "id": str(link.parent_id),
+                "user": str(link.parent.user_id),
+                "full_name": self._format_parent_full_name(link.parent),
+                "relationship_type": link.relationship_type,
+                "is_primary_contact": link.is_primary_contact,
+            }
+            for link in parent_links
+        ]
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -509,6 +536,31 @@ class ParentReadSerializer(ParentSerializer):
             "student_details",
         ]
 
+    def _request_user_can_view_phone_numbers(self, obj: Parent) -> bool:
+        request = self.context.get("request")
+        if request is None:
+            return True
+
+        user = request.user
+        if not getattr(user, "is_authenticated", False):
+            return False
+
+        if user.is_superuser or obj.user_id == user.id:
+            return True
+
+        if obj.organizations.filter(owner=user).exists():
+            return True
+
+        if obj.branches.filter(
+            admins__user=user,
+            admins__status="ACTIVE",
+        ).exists():
+            return True
+
+        return obj.student_links.filter(
+            student__current_section__homeroom_assignments__teacher__user=user,
+        ).exists()
+
     def get_organization_details(self, obj) -> list[dict]:
         return [
             {
@@ -544,6 +596,19 @@ class ParentReadSerializer(ParentSerializer):
             }
             for link in obj.student_links.select_related("student")
         ]
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if self._request_user_can_view_phone_numbers(instance):
+            return data
+
+        user_details = data.get("user_details")
+        if isinstance(user_details, dict):
+            user_details["phone_number"] = None
+
+        data["secondary_phone_number"] = None
+        data["emergency_contact_phone"] = None
+        return data
 
 
 class ParentInviteSerializer(serializers.Serializer):
