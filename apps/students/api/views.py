@@ -832,6 +832,11 @@ class ParentInviteView(APIView):
             parent.organizations.add(branch.organization)
             parent.branches.add(branch)
 
+            # Ensure invited parents always remain inactive until invitation completion.
+            user.is_active = False
+            user.verified_at = None
+            user.save(update_fields=["is_active", "verified_at", "updated_at"])
+
             invitation_link = create_invitation_link(
                 user=user,
                 path_template="complete-parent-invitation/{uid}/{token}",
