@@ -49,7 +49,7 @@ repos:
       - id: djlint-django
 
   - repo: https://github.com/bridgecrewio/checkov.git
-    rev: 3.2.529
+    rev: 3.2.530
     hooks:
       - id: checkov
         args:
@@ -62,7 +62,7 @@ repos:
       - id: terraform_fmt
       - id: terraform_validate
         args:
-        - --hook-config=--retry-once-with-cleanup=true
+          - --hook-config=--retry-once-with-cleanup=true
       - id: terraform_docs
         args:
           - --args=--config=.terraform-docs.yaml

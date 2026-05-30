@@ -11,6 +11,20 @@ License: MIT
 
 Moved to [settings](https://cookiecutter-django.readthedocs.io/en/latest/1-getting-started/settings.html).
 
+### SMS Backend (Telerivet)
+
+Parent OTP (`/auth/otp/request/`) and parent invitation (`/api/parents/invite/`)
+use the configured SMS backend. To use Telerivet:
+
+```
+SMS_BACKEND=accounts.sms_backends.TelerivetSMSBackend
+TELERIVET_API_KEY=your_telerivet_api_key
+TELERIVET_PROJECT_ID=your_telerivet_project_id
+TELERIVET_TIMEOUT_SECONDS=10
+```
+
+Phone numbers should be provided in international format, e.g. `+2519XXXXXXXX`.
+
 ## Basic Commands
 
 ### Setting Up Your Users

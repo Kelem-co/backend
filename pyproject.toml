@@ -18,6 +18,8 @@ dependencies = [
   "argon2-cffi==25.1.0",
   "celery==5.6.3",
   "certifi>=2026.4.22",
+  "channels==4.2.2",
+  "channels-redis==4.2.1",
   "collectfasta==3.3.3",
   "crispy-bootstrap5==2026.3",
   "django==6.0.4",

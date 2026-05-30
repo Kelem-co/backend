@@ -1,5 +1,6 @@
 import secrets
 
+from accounts.email import ParentInvitationEmail
 from accounts.models import User
 from accounts.services import create_invitation_link
 from accounts.sms import send_parent_invitation_sms
@@ -758,7 +759,7 @@ class ParentInviteView(APIView):
             existing_user = data.get("existing_user")
             if existing_user is None:
                 user = User.objects.create_user(
-                    email=None,
+                    email=data.get("email") or None,
                     password=random_password,
                     name=data["name"],
                     father_name=data["father_name"],
@@ -783,6 +784,7 @@ class ParentInviteView(APIView):
                 user.father_name = data["father_name"]
                 user.grandfather_name = data["grandfather_name"]
                 user.phone_number = data["phone_number"]
+                user.email = data.get("email") or None
                 user.role = User.Role.PARENT
                 user.is_active = False
                 user.verified_at = None
@@ -793,6 +795,7 @@ class ParentInviteView(APIView):
                         "father_name",
                         "grandfather_name",
                         "phone_number",
+                        "email",
                         "role",
                         "is_active",
                         "verified_at",
@@ -837,6 +840,17 @@ class ParentInviteView(APIView):
                 phone_number=user.phone_number or "",
                 invitation_url=invitation_link.full_url,
             )
+            email_obj = ParentInvitationEmail(
+                request,
+                context={
+                    "user": user,
+                    "branch_name": branch.name,
+                    "invited_by": request.user.name,
+                    "url": invitation_link.path,
+                },
+            )
+            if user.email:
+                email_obj.send([user.email])
 
         return Response(
             {

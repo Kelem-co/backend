@@ -74,6 +74,7 @@ DJANGO_APPS = [
     "django.forms",
 ]
 THIRD_PARTY_APPS = [
+    "channels",
     "crispy_forms",
     "crispy_bootstrap5",
     "allauth",
@@ -103,10 +104,13 @@ LOCAL_APPS = [
     "announcements",
     "core",
     "media",
+    "messaging",
     # Your stuff: custom apps go here
 ]
 # https://docs.djangoproject.com/en/dev/ref/settings/#installed-apps
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
+
+ASGI_APPLICATION = "config.asgi.application"
 
 # MIGRATIONS
 # ------------------------------------------------------------------------------
@@ -263,6 +267,9 @@ SMS_BACKEND = env(
     "SMS_BACKEND",
     default="accounts.sms.LoggingSMSBackend",
 )
+TELERIVET_API_KEY = env("TELERIVET_API_KEY", default="")
+TELERIVET_PROJECT_ID = env("TELERIVET_PROJECT_ID", default="")
+TELERIVET_TIMEOUT_SECONDS = env.int("TELERIVET_TIMEOUT_SECONDS", default=10)
 PARENT_OTP_EXPIRY_SECONDS = env.int(
     "PARENT_OTP_EXPIRY_SECONDS",
     default=300,
@@ -324,6 +331,15 @@ LOGGING = {
 
 REDIS_URL = env("REDIS_URL", default="redis://redis:6379/0")
 REDIS_SSL = REDIS_URL.startswith("rediss://")
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [REDIS_URL],
+        },
+    },
+}
 
 # Celery
 # ------------------------------------------------------------------------------

@@ -101,5 +101,9 @@ class TeacherInvitationEmail(AsyncMultipartDjoserEmail):
     template_stem = "teacher_invitation"
 
 
+class ParentInvitationEmail(AsyncMultipartDjoserEmail):
+    template_stem = "parent_invitation"
+
+
 class OrganizationApprovalMagicLinkEmail(AsyncMultipartDjoserEmail):
     template_stem = "organization_approval_magic_link"
