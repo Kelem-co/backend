@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from accounts.api.auth_serializers import ApprovalMagicLinkExchangeSerializer
+from accounts.api.auth_serializers import ParentPhoneOrEmailTokenObtainPairSerializer
 from accounts.api.auth_serializers import ParentOTPRequestSerializer
 from accounts.api.auth_serializers import ParentOTPVerifySerializer
 from accounts.auth import ORGANIZATION_LOGIN_BLOCK_MESSAGE
@@ -13,7 +14,6 @@ from accounts.services import consume_parent_login_otp
 from accounts.services import create_parent_login_otp
 from accounts.sms import send_parent_otp_sms
 from django.conf import settings
-from django.contrib.auth import authenticate
 from django.db import transaction
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
@@ -25,8 +25,8 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import default_user_authentication_rule
 from rest_framework_simplejwt.exceptions import InvalidToken
 from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.views import TokenRefreshView
+from rest_framework_simplejwt.views import TokenObtainPairView
 
 if TYPE_CHECKING:
     from rest_framework.request import Request
@@ -54,24 +54,21 @@ def _delete_refresh_cookie(response: Response) -> None:
 
 
 class OrganizationAwareTokenObtainPairView(TokenObtainPairView):
+    serializer_class = ParentPhoneOrEmailTokenObtainPairSerializer
+
     def post(
         self,
         request: Request,
         *args,
         **kwargs,
     ) -> Response:
-        serializer_class = self.get_serializer_class()
-        username_field = serializer_class.username_field
-        authenticate_kwargs = {
-            username_field: request.data.get(username_field, ""),
-            "password": request.data.get("password", ""),
-            "request": request,
-        }
-        user = authenticate(**authenticate_kwargs)
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
 
+        user = serializer.user
         if user is None or not default_user_authentication_rule(user):
             raise exceptions.AuthenticationFailed(
-                serializer_class.default_error_messages["no_active_account"],
+                serializer.error_messages["no_active_account"],
                 "no_active_account",
             )
 
@@ -82,9 +79,11 @@ class OrganizationAwareTokenObtainPairView(TokenObtainPairView):
                 "organization_not_verified",
             )
 
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        return Response(serializer.validated_data, status=status.HTTP_200_OK)
+        response = Response(serializer.validated_data, status=status.HTTP_200_OK)
+        refresh_token = serializer.validated_data.get("refresh")
+        if refresh_token:
+            _set_refresh_cookie(response, refresh_token)
+        return response
 
 
 class OrganizationApprovalMagicLinkExchangeView(APIView):

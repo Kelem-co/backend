@@ -200,6 +200,30 @@ def test_parent_otp_request_rejects_inactive_parent(api_client: APIClient):
 
 
 @pytest.mark.django_db
+@patch("accounts.jwt_views.send_parent_otp_sms")
+def test_parent_otp_request_allows_pending_invited_parent(
+    mock_send_sms,
+    api_client: APIClient,
+):
+    user = UserFactory(
+        role=User.Role.PARENT,
+        is_active=False,
+        phone_number="+251911111399",
+    )
+    Parent.objects.create(user=user, is_active=False)
+
+    response = api_client.post(
+        "/auth/otp/request/",
+        {"phone_number": user.phone_number},
+        format="json",
+    )
+
+    assert response.status_code == HTTPStatus.OK
+    assert ParentLoginOTP.objects.filter(user=user).count() == 1
+    assert mock_send_sms.called
+
+
+@pytest.mark.django_db
 def test_parent_otp_request_rejects_non_parent_user(api_client: APIClient):
     user = UserFactory(
         role=User.Role.TEACHER,

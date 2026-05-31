@@ -2,6 +2,7 @@ import secrets
 
 from accounts.email import ParentInvitationEmail
 from accounts.models import User
+from accounts.services import consume_parent_login_otp
 from accounts.services import create_invitation_link
 from accounts.sms import send_parent_invitation_sms
 from branches.models import Branch
@@ -905,34 +906,23 @@ class ParentCompleteInvitationView(APIView):
         serializer = ParentCompleteInvitationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        uid = serializer.validated_data["uid"]
-        token = serializer.validated_data["token"]
+        user = serializer.context["target_user"]
+        parent_profile = serializer.context["target_parent_profile"]
 
-        try:
-            user_id = force_str(urlsafe_base64_decode(uid))
-            user = User.objects.get(pk=user_id)
-        except (TypeError, ValueError, OverflowError, User.DoesNotExist) as err:
-            raise ValidationError({"uid": "Invalid user ID."}) from err
+        consume_parent_login_otp(
+            user=user,
+            raw_code=serializer.validated_data["otp_code"],
+        )
 
-        if user.role != User.Role.PARENT or user.is_active:
-            raise ValidationError({"uid": "Invalid or expired invitation."})
-
-        if not default_token_generator.check_token(user, token):
-            raise ValidationError({"token": "Invalid or expired token."})
-
-        try:
-            parent_profile = user.parent_profile
-        except Parent.DoesNotExist as err:
-            raise ValidationError({"uid": "Invalid or expired invitation."}) from err
-
+        user.set_password(serializer.validated_data["new_password"])
         user.is_active = True
         user.verified_at = timezone.now()
-        user.save(update_fields=["is_active", "verified_at", "updated_at"])
+        user.save(update_fields=["password", "is_active", "verified_at", "updated_at"])
 
         parent_profile.is_active = True
         parent_profile.save(update_fields=["is_active", "updated_at"])
 
         return Response(
-            {"message": "Parent account activated successfully."},
+            {"message": "Password set and parent account activated successfully."},
             status=status.HTTP_200_OK,
         )
