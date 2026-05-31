@@ -280,7 +280,7 @@ class TestParentJwtPhoneLogin:
     ) -> None:
         user = UserFactory(
             role=User.Role.PARENT,
-            password="correct-password-123",  # noqa: S105
+            password="correct-password-123",  # noqa: S106
             phone_number="+251911111411",
             is_active=True,
         )

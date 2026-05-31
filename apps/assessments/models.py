@@ -301,7 +301,16 @@ class HomeworkConfirmation(UUIDModel, TimeStampedModel):
     def clean(self):
         super().clean()
         errors = {}
+        self._validate_homework_assessment(errors)
+        self._validate_student_context(errors)
+        self._validate_organization(errors)
+        self._validate_branch(errors)
+        self._validate_section(errors)
 
+        if errors:
+            raise ValidationError(errors)
+
+    def _validate_homework_assessment(self, errors):
         if (
             self.assessment_id
             and self.assessment.task_type != Assessment.TaskType.HOMEWORK
@@ -310,38 +319,54 @@ class HomeworkConfirmation(UUIDModel, TimeStampedModel):
                 "Homework confirmations are only valid for homework assessments.",
             )
 
-        if self.assessment_id and self.student_id:
-            if self.student.branch_id != self.assessment.branch_id:
-                errors["student"] = _(
-                    "Student must belong to the same branch as the assessment.",
-                )
-            if self.student.organization_id != self.assessment.organization_id:
-                errors["student"] = _(
-                    "Student must belong to the same organization as the assessment.",
-                )
-            if (
-                self.student.current_section_id
-                != self.assessment.teacher_assignment.section_id
-            ):
-                errors["student"] = _(
-                    "Student must belong to the assessment's section.",
-                )
+    def _validate_student_context(self, errors):
+        if not (self.assessment_id and self.student_id):
+            return
 
-        if self.organization_id and self.assessment_id:
-            if self.organization_id != self.assessment.organization_id:
-                errors["organization"] = _(
-                    "Organization must match the assessment organization.",
-                )
+        if self.student.branch_id != self.assessment.branch_id:
+            errors["student"] = _(
+                "Student must belong to the same branch as the assessment.",
+            )
+            return
 
-        if self.branch_id and self.assessment_id:
-            if self.branch_id != self.assessment.branch_id:
-                errors["branch"] = _("Branch must match the assessment branch.")
+        if self.student.organization_id != self.assessment.organization_id:
+            errors["student"] = _(
+                "Student must belong to the same organization as the assessment.",
+            )
+            return
 
-        if self.section_id and self.assessment_id:
-            if self.section_id != self.assessment.teacher_assignment.section_id:
-                errors["section"] = _(
-                    "Section must match the assessment section.",
-                )
+        if (
+            self.student.current_section_id
+            != self.assessment.teacher_assignment.section_id
+        ):
+            errors["student"] = _(
+                "Student must belong to the assessment's section.",
+            )
 
-        if errors:
-            raise ValidationError(errors)
+    def _validate_organization(self, errors):
+        if (
+            self.organization_id
+            and self.assessment_id
+            and self.organization_id != self.assessment.organization_id
+        ):
+            errors["organization"] = _(
+                "Organization must match the assessment organization.",
+            )
+
+    def _validate_branch(self, errors):
+        if (
+            self.branch_id
+            and self.assessment_id
+            and self.branch_id != self.assessment.branch_id
+        ):
+            errors["branch"] = _("Branch must match the assessment branch.")
+
+    def _validate_section(self, errors):
+        if (
+            self.section_id
+            and self.assessment_id
+            and self.section_id != self.assessment.teacher_assignment.section_id
+        ):
+            errors["section"] = _(
+                "Section must match the assessment section.",
+            )

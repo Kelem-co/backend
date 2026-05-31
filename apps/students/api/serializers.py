@@ -3,13 +3,13 @@ from academics.models import Section
 from accounts.api.serializers import UserSerializer
 from accounts.models import User
 from accounts.services import normalize_phone_number
+from branches.models import Branch
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.tokens import default_token_generator
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import transaction
 from django.utils.encoding import force_str
 from django.utils.http import urlsafe_base64_decode
-from branches.models import Branch
-from django.db import transaction
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 from students.models import Parent
@@ -738,7 +738,8 @@ class ParentCompleteInvitationSerializer(serializers.Serializer):
             user_id = force_str(urlsafe_base64_decode(value))
             user = User.objects.get(pk=user_id)
         except (TypeError, ValueError, OverflowError, User.DoesNotExist) as err:
-            raise ValidationError("Invalid user ID.") from err
+            message = "Invalid user ID."
+            raise ValidationError(message) from err
 
         self.context["target_user"] = user
         return value

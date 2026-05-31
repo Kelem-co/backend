@@ -6,6 +6,8 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
+from accounts.api.auth_serializers import INCONSISTENT_PARENT_ACCOUNT_STATE_MESSAGE
+from accounts.api.auth_serializers import NO_ACTIVE_PARENT_ACCOUNT_MESSAGE
 from accounts.models import ParentLoginOTP
 from accounts.models import User
 from accounts.services import create_parent_login_otp
@@ -197,6 +199,33 @@ def test_parent_otp_request_rejects_inactive_parent(api_client: APIClient):
 
     assert response.status_code == HTTPStatus.BAD_REQUEST
     assert response.data["errors"][0]["field"] == "phone_number"
+    assert response.data["errors"][0]["detail"] == (
+        INCONSISTENT_PARENT_ACCOUNT_STATE_MESSAGE
+    )
+
+
+@pytest.mark.django_db
+def test_parent_otp_request_rejects_active_user_with_inactive_parent(
+    api_client: APIClient,
+):
+    user = UserFactory(
+        role=User.Role.PARENT,
+        is_active=True,
+        phone_number="+251911111304",
+    )
+    Parent.objects.create(user=user, is_active=False)
+
+    response = api_client.post(
+        "/auth/otp/request/",
+        {"phone_number": user.phone_number},
+        format="json",
+    )
+
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+    assert response.data["errors"][0]["field"] == "phone_number"
+    assert response.data["errors"][0]["detail"] == (
+        INCONSISTENT_PARENT_ACCOUNT_STATE_MESSAGE
+    )
 
 
 @pytest.mark.django_db
@@ -239,3 +268,23 @@ def test_parent_otp_request_rejects_non_parent_user(api_client: APIClient):
 
     assert response.status_code == HTTPStatus.BAD_REQUEST
     assert response.data["errors"][0]["field"] == "phone_number"
+    assert response.data["errors"][0]["detail"] == NO_ACTIVE_PARENT_ACCOUNT_MESSAGE
+
+
+@pytest.mark.django_db
+def test_parent_otp_request_rejects_parent_without_profile(api_client: APIClient):
+    user = UserFactory(
+        role=User.Role.PARENT,
+        is_active=False,
+        phone_number="+251911111305",
+    )
+
+    response = api_client.post(
+        "/auth/otp/request/",
+        {"phone_number": user.phone_number},
+        format="json",
+    )
+
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+    assert response.data["errors"][0]["field"] == "phone_number"
+    assert response.data["errors"][0]["detail"] == NO_ACTIVE_PARENT_ACCOUNT_MESSAGE

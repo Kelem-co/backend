@@ -5,7 +5,9 @@ from urllib.parse import parse_qs
 from channels.auth import AuthMiddlewareStack
 from channels.db import database_sync_to_async
 from django.contrib.auth.models import AnonymousUser
+from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework_simplejwt.exceptions import InvalidToken
 
 
 @database_sync_to_async
@@ -31,11 +33,11 @@ class JwtQueryAuthMiddleware:
         if token:
             try:
                 scope["user"] = await _get_user_from_token(token)
-            except Exception:
+            except AuthenticationFailed, InvalidToken:
                 scope["user"] = AnonymousUser()
 
         return await self.inner(scope, receive, send)
 
 
-def JwtQueryAuthMiddlewareStack(inner):
+def jwt_query_auth_middleware_stack(inner):
     return AuthMiddlewareStack(JwtQueryAuthMiddleware(inner))

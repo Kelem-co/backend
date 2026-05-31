@@ -4,7 +4,6 @@ from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from messaging.access import thread_scope_filter_for_user
 from messaging.access import user_can_access_thread
-from messaging.models import ChatMessage
 from messaging.models import ChatThread
 from rest_framework import status
 from rest_framework import viewsets
@@ -48,7 +47,9 @@ class ThreadViewSet(viewsets.ModelViewSet):
         params = ResolveThreadSerializer(data=request.query_params)
         params.is_valid(raise_exception=True)
 
-        queryset = self.get_queryset().filter(student_id=params.validated_data["student"])
+        queryset = self.get_queryset().filter(
+            student_id=params.validated_data["student"],
+        )
         teacher_id = params.validated_data.get("teacher")
         parent_id = params.validated_data.get("parent")
 

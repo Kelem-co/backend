@@ -3,9 +3,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from accounts.api.auth_serializers import ApprovalMagicLinkExchangeSerializer
-from accounts.api.auth_serializers import ParentPhoneOrEmailTokenObtainPairSerializer
 from accounts.api.auth_serializers import ParentOTPRequestSerializer
 from accounts.api.auth_serializers import ParentOTPVerifySerializer
+from accounts.api.auth_serializers import ParentPhoneOrEmailTokenObtainPairSerializer
 from accounts.auth import ORGANIZATION_LOGIN_BLOCK_MESSAGE
 from accounts.auth import OrganizationLoginState
 from accounts.auth import get_organization_login_state
@@ -25,8 +25,8 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import default_user_authentication_rule
 from rest_framework_simplejwt.exceptions import InvalidToken
 from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework_simplejwt.views import TokenRefreshView
 from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.views import TokenRefreshView
 
 if TYPE_CHECKING:
     from rest_framework.request import Request

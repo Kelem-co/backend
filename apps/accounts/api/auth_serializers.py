@@ -8,8 +8,8 @@ from django.contrib.auth import authenticate
 from django.contrib.auth.models import update_last_login
 from django.utils.encoding import force_str
 from django.utils.http import urlsafe_base64_decode
-from rest_framework import serializers
 from rest_framework import exceptions
+from rest_framework import serializers
 from rest_framework_simplejwt.authentication import default_user_authentication_rule
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.settings import api_settings
@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 NO_ACTIVE_PARENT_ACCOUNT_MESSAGE = (
     "No active parent account was found for this phone number."
 )
+INCONSISTENT_PARENT_ACCOUNT_STATE_MESSAGE = "Parent account state is inconsistent. Please re-send the invitation or contact support."  # noqa: E501
 
 
 def authenticate_phone_or_email_credentials(
@@ -111,7 +112,9 @@ class ParentOTPRequestSerializer(serializers.Serializer):
             ) from err
 
         if user.is_active != parent_profile.is_active:
-            raise serializers.ValidationError(NO_ACTIVE_PARENT_ACCOUNT_MESSAGE)
+            raise serializers.ValidationError(
+                INCONSISTENT_PARENT_ACCOUNT_STATE_MESSAGE,
+            )
 
         self.context["target_user"] = user
         return normalized

@@ -94,7 +94,11 @@ class ChatThreadSerializer(serializers.ModelSerializer):
         return result["last"]
 
     def get_latest_message(self, obj):
-        latest = obj.messages.select_related("sender", "attachment").order_by("created_at").last()
+        latest = (
+            obj.messages.select_related("sender", "attachment")
+            .order_by("created_at")
+            .last()
+        )
         if latest is None:
             return None
         return ChatMessageSerializer(latest, context=self.context).data
@@ -161,7 +165,6 @@ class ResolveThreadSerializer(serializers.Serializer):
 
     def validate(self, attrs):
         if not attrs.get("teacher") and not attrs.get("parent"):
-            raise serializers.ValidationError(
-                "Either teacher or parent is required to resolve a thread."
-            )
+            message = "Either teacher or parent is required to resolve a thread."
+            raise serializers.ValidationError(message)
         return attrs

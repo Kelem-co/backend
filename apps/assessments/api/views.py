@@ -44,6 +44,10 @@ def scope_assessment_queryset_for_user(queryset, user):
     return queryset.filter(access_filter).distinct()
 
 
+def _is_truthy_query_value(value):
+    return value is not None and value.lower() in ("true", "1", "yes")
+
+
 class AssessmentViewSet(viewsets.ModelViewSet):
     """
     CRUD for Assessments (Assignments, Exams, Homework, Quizzes, etc.).
@@ -93,24 +97,7 @@ class AssessmentViewSet(viewsets.ModelViewSet):
             return qs.none()
 
         qs = scope_assessment_queryset_for_user(qs, self.request.user)
-        p = self.request.query_params
-        if p.get("organization"):
-            qs = qs.filter(organization_id=p["organization"])
-        if p.get("branch"):
-            qs = qs.filter(branch_id=p["branch"])
-        if p.get("teacher_assignment"):
-            qs = qs.filter(teacher_assignment_id=p["teacher_assignment"])
-        if p.get("teacher"):
-            qs = qs.filter(teacher_assignment__teacher_id=p["teacher"])
-        if p.get("section"):
-            qs = qs.filter(teacher_assignment__section_id=p["section"])
-        if p.get("subject"):
-            qs = qs.filter(teacher_assignment__subject_id=p["subject"])
-        if p.get("task_type"):
-            qs = qs.filter(task_type=p["task_type"].upper())
-        if p.get("status"):
-            qs = qs.filter(status=p["status"].upper())
-        return qs
+        return self._apply_assessment_filters(qs)
 
     def get_serializer_class(self):
         if self.action in [
@@ -123,64 +110,75 @@ class AssessmentViewSet(viewsets.ModelViewSet):
             return AssessmentReadSerializer
         return AssessmentSerializer
 
-    def _build_todays_homework_rows(self):
-        today = timezone.localdate()
-        qs = self.get_queryset().filter(
+    def _apply_assessment_filters(self, queryset):
+        filters = {
+            "organization": "organization_id",
+            "branch": "branch_id",
+            "teacher_assignment": "teacher_assignment_id",
+            "teacher": "teacher_assignment__teacher_id",
+            "section": "teacher_assignment__section_id",
+            "subject": "teacher_assignment__subject_id",
+        }
+        queryset_filters = {}
+        for param, lookup in filters.items():
+            value = self.request.query_params.get(param)
+            if value:
+                queryset_filters[lookup] = value
+
+        if queryset_filters:
+            queryset = queryset.filter(**queryset_filters)
+
+        task_type = self.request.query_params.get("task_type")
+        if task_type:
+            queryset = queryset.filter(task_type=task_type.upper())
+
+        status_value = self.request.query_params.get("status")
+        if status_value:
+            queryset = queryset.filter(status=status_value.upper())
+
+        return queryset
+
+    def _get_homework_base_queryset(self):
+        queryset = self.get_queryset().filter(
             task_type=Assessment.TaskType.HOMEWORK,
-            due_date=today,
+            due_date=timezone.localdate(),
             status=Assessment.Status.PUBLISHED,
         )
-        p = self.request.query_params
-        if p.get("branch"):
-            qs = qs.filter(branch_id=p["branch"])
-        if p.get("section"):
-            qs = qs.filter(teacher_assignment__section_id=p["section"])
+        branch_id = self.request.query_params.get("branch")
+        if branch_id:
+            queryset = queryset.filter(branch_id=branch_id)
 
+        section_id = self.request.query_params.get("section")
+        if section_id:
+            queryset = queryset.filter(teacher_assignment__section_id=section_id)
+
+        return queryset
+
+    def _get_parent_profile(self):
         try:
-            parent_profile = self.request.user.parent_profile
-            is_parent = True
+            return self.request.user.parent_profile
         except ObjectDoesNotExist:
-            parent_profile = None
-            is_parent = False
+            return None
 
-        student_id = p.get("student")
-        include_student_rows = is_parent or bool(student_id)
+    def _get_student_queryset(self, parent_profile, student_id):
+        student_model = __import__("students.models", fromlist=["Student"]).Student
+        students = student_model.objects.select_related("current_section")
+        if parent_profile is not None:
+            return students.filter(parent_links__parent=parent_profile).distinct()
+        if student_id:
+            return students.filter(id=student_id)
+        return None
 
-        if is_parent:
-            students = (
-                __import__(
-                    "students.models",
-                    fromlist=["Student"],
-                )
-                .Student.objects.filter(
-                    parent_links__parent=parent_profile,
-                )
-                .select_related("current_section")
-                .distinct()
-            )
-        elif student_id:
-            students = (
-                __import__(
-                    "students.models",
-                    fromlist=["Student"],
-                )
-                .Student.objects.filter(id=student_id)
-                .select_related("current_section")
-            )
-        else:
-            students = None
-
-        if students is not None and student_id:
-            students = students.filter(id=student_id)
-
+    def _build_confirmation_maps(self, queryset, students):
         confirmations = HomeworkConfirmation.objects.filter(
-            assessment_id__in=qs.values_list("id", flat=True),
+            assessment_id__in=queryset.values_list("id", flat=True),
         )
         if students is not None:
             confirmations = confirmations.filter(
                 student_id__in=students.values_list("id", flat=True),
             )
         confirmations = confirmations.select_related("assessment", "student")
+
         confirmation_map = {
             (confirmation.assessment_id, confirmation.student_id): confirmation
             for confirmation in confirmations
@@ -188,62 +186,95 @@ class AssessmentViewSet(viewsets.ModelViewSet):
         assessment_confirmation_map = {}
         for confirmation in confirmations:
             assessment_confirmation_map.setdefault(
-                confirmation.assessment_id, []
-            ).append(
-                confirmation,
-            )
+                confirmation.assessment_id,
+                [],
+            ).append(confirmation)
 
+        return confirmation_map, assessment_confirmation_map
+
+    def _matches_confirmed_filter(self, confirmed):
+        confirmed_filter = self.request.query_params.get("confirmed")
+        if confirmed_filter is None:
+            return True
+        return confirmed == _is_truthy_query_value(confirmed_filter)
+
+    def _build_student_homework_rows(
+        self,
+        assessment,
+        students,
+        confirmation_map,
+    ):
         rows = []
-        confirmed_filter = p.get("confirmed")
-        for assessment in qs:
-            if include_student_rows:
-                matching_students = students.filter(
-                    current_section_id=assessment.teacher_assignment.section_id,
-                    branch_id=assessment.branch_id,
-                    organization_id=assessment.organization_id,
-                )
-                for student in matching_students:
-                    confirmation = confirmation_map.get((assessment.id, student.id))
-                    confirmed = bool(confirmation and confirmation.is_confirmed)
-                    if confirmed_filter is not None:
-                        requested_confirmed = confirmed_filter.lower() in (
-                            "true",
-                            "1",
-                            "yes",
-                        )
-                        if confirmed != requested_confirmed:
-                            continue
-                    rows.append(
-                        {
-                            "assessment": assessment,
-                            "student": student,
-                            "confirmed": confirmed,
-                            "homework_confirmation": confirmation,
-                        },
-                    )
+        matching_students = students.filter(
+            current_section_id=assessment.teacher_assignment.section_id,
+            branch_id=assessment.branch_id,
+            organization_id=assessment.organization_id,
+        )
+        for student in matching_students:
+            confirmation = confirmation_map.get((assessment.id, student.id))
+            confirmed = bool(confirmation and confirmation.is_confirmed)
+            if not self._matches_confirmed_filter(confirmed):
                 continue
-
-            assessment_confirmations = assessment_confirmation_map.get(
-                assessment.id, []
-            )
-            assessment_confirmed = any(
-                confirmation.is_confirmed for confirmation in assessment_confirmations
-            )
-            if confirmed_filter is not None:
-                requested_confirmed = confirmed_filter.lower() in ("true", "1", "yes")
-                if assessment_confirmed != requested_confirmed:
-                    continue
-
             rows.append(
                 {
                     "assessment": assessment,
-                    "student": None,
-                    "confirmed": assessment_confirmed,
-                    "homework_confirmation": assessment_confirmations[0]
-                    if assessment_confirmations
-                    else None,
+                    "student": student,
+                    "confirmed": confirmed,
+                    "homework_confirmation": confirmation,
                 },
             )
+        return rows
+
+    def _build_assessment_homework_row(self, assessment, assessment_confirmation_map):
+        assessment_confirmations = assessment_confirmation_map.get(assessment.id, [])
+        assessment_confirmed = any(
+            confirmation.is_confirmed for confirmation in assessment_confirmations
+        )
+        if not self._matches_confirmed_filter(assessment_confirmed):
+            return None
+
+        return {
+            "assessment": assessment,
+            "student": None,
+            "confirmed": assessment_confirmed,
+            "homework_confirmation": assessment_confirmations[0]
+            if assessment_confirmations
+            else None,
+        }
+
+    def _build_todays_homework_rows(self):
+        qs = self._get_homework_base_queryset()
+        student_id = self.request.query_params.get("student")
+        parent_profile = self._get_parent_profile()
+        students = self._get_student_queryset(parent_profile, student_id)
+        include_student_rows = parent_profile is not None or bool(student_id)
+
+        if students is not None and student_id:
+            students = students.filter(id=student_id)
+
+        confirmation_map, assessment_confirmation_map = self._build_confirmation_maps(
+            qs,
+            students,
+        )
+
+        rows = []
+        for assessment in qs:
+            if include_student_rows:
+                rows.extend(
+                    self._build_student_homework_rows(
+                        assessment,
+                        students,
+                        confirmation_map,
+                    ),
+                )
+                continue
+
+            row = self._build_assessment_homework_row(
+                assessment,
+                assessment_confirmation_map,
+            )
+            if row is not None:
+                rows.append(row)
         return rows
 
     # ------------------------------------------------------------------
@@ -414,26 +445,7 @@ class AssessmentResultViewSet(viewsets.ModelViewSet):
             qs = self._scope_todays_homework_queryset(qs)
         else:
             qs = scope_assessment_result_queryset_for_user(qs, self.request.user)
-        p = self.request.query_params
-        if p.get("organization"):
-            qs = qs.filter(organization_id=p["organization"])
-        if p.get("assessment"):
-            qs = qs.filter(assessment_id=p["assessment"])
-        if p.get("student"):
-            qs = qs.filter(student_id=p["student"])
-        if p.get("submission_status"):
-            qs = qs.filter(submission_status=p["submission_status"].upper())
-        if p.get("parent_confirmed") is not None:
-            val = p["parent_confirmed"].lower() in ("true", "1", "yes")
-            qs = qs.filter(parent_confirmed=val)
-        if p.get("section"):
-            qs = qs.filter(assessment__teacher_assignment__section_id=p["section"])
-        if p.get("branch"):
-            qs = qs.filter(assessment__branch_id=p["branch"])
-        if p.get("confirmed") is not None:
-            val = p["confirmed"].lower() in ("true", "1", "yes")
-            qs = qs.filter(parent_confirmed=val)
-        return qs
+        return self._apply_result_filters(qs)
 
     def get_serializer_class(self):
         if self.action in [
@@ -474,6 +486,36 @@ class AssessmentResultViewSet(viewsets.ModelViewSet):
                 section_lookup="assessment__teacher_assignment__section",
             )
         return queryset.filter(access_filter).distinct()
+
+    def _apply_result_filters(self, queryset):
+        filters = {
+            "organization": "organization_id",
+            "assessment": "assessment_id",
+            "student": "student_id",
+            "section": "assessment__teacher_assignment__section_id",
+            "branch": "assessment__branch_id",
+        }
+        queryset_filters = {}
+        for param, lookup in filters.items():
+            value = self.request.query_params.get(param)
+            if value:
+                queryset_filters[lookup] = value
+
+        if queryset_filters:
+            queryset = queryset.filter(**queryset_filters)
+
+        submission_status = self.request.query_params.get("submission_status")
+        if submission_status:
+            queryset = queryset.filter(submission_status=submission_status.upper())
+
+        for param in ("parent_confirmed", "confirmed"):
+            value = self.request.query_params.get(param)
+            if value is not None:
+                queryset = queryset.filter(
+                    parent_confirmed=_is_truthy_query_value(value),
+                )
+
+        return queryset
 
     def perform_create(self, serializer):
         self._enforce_teacher_result_access(

@@ -89,7 +89,7 @@ class TestAssessmentsAPI:
             specialization="Mathematics",
         )
 
-    def test_list_can_filter_by_teacher_section_and_subject(  # noqa: PLR0913
+    def test_list_can_filter_by_teacher_section_and_subject(
         self,
         api_client,
         owner,
@@ -166,7 +166,7 @@ class TestAssessmentsAPI:
         assert response.data["results"][0]["section_name"] == section.name
         assert response.data["results"][0]["subject_name"] == subject.name
 
-    def test_teacher_can_fetch_own_assessments_by_filters(  # noqa: PLR0913
+    def test_teacher_can_fetch_own_assessments_by_filters(
         self,
         api_client,
         organization,
@@ -336,7 +336,7 @@ class TestAssessmentResultsTeacherAccessAPI:
         )
 
     @pytest.fixture
-    def assessment(  # noqa: PLR0913
+    def assessment(
         self,
         organization,
         branch,
@@ -365,7 +365,7 @@ class TestAssessmentResultsTeacherAccessAPI:
         )
 
     @pytest.fixture
-    def other_assessment(  # noqa: PLR0913
+    def other_assessment(
         self,
         organization,
         branch,
@@ -475,7 +475,7 @@ class TestAssessmentResultsTeacherAccessAPI:
         assert bulk_response.status_code == status.HTTP_200_OK
         assert bulk_response.data["updated"] == 1
 
-    def test_teacher_cannot_read_or_write_other_teachers_results(  # noqa: PLR0913
+    def test_teacher_cannot_read_or_write_other_teachers_results(
         self,
         api_client,
         teacher,
@@ -485,7 +485,7 @@ class TestAssessmentResultsTeacherAccessAPI:
         branch,
         other_section,
     ):
-        foreign_result = AssessmentResult.objects.create(
+        AssessmentResult.objects.create(
             organization=other_assessment.organization,
             assessment=other_assessment,
             student=other_student,
