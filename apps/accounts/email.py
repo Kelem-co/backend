@@ -9,6 +9,8 @@ from django.conf import settings as django_settings
 from django.template.loader import render_to_string
 from djoser import email
 
+from .services import get_frontend_domain_for_user
+from .services import get_frontend_protocol_for_user
 from .tasks import send_email_task
 
 if TYPE_CHECKING:
@@ -21,6 +23,41 @@ def _template_path(stem: str, suffix: str) -> str:
 
 class AsyncMultipartDjoserEmail(email.BaseDjoserEmail):
     template_stem: str
+
+    def get_context_data(self) -> dict[str, Any]:
+        context = super().get_context_data()
+        user = context.get("user")
+        if user is None:
+            return context
+
+        default_domains = {
+            str(value).rstrip("/")
+            for value in (
+                getattr(django_settings, "FRONTEND_DOMAIN", None),
+                django_settings.DJOSER.get("EMAIL_FRONTEND_DOMAIN"),
+            )
+            if value not in (None, "")
+        }
+        default_protocols = {
+            str(value)
+            for value in (
+                getattr(django_settings, "FRONTEND_PROTOCOL", None),
+                django_settings.DJOSER.get("EMAIL_FRONTEND_PROTOCOL"),
+            )
+            if value not in (None, "")
+        }
+
+        role_domain = get_frontend_domain_for_user(user)
+        role_protocol = get_frontend_protocol_for_user(user)
+
+        current_domain = str(context.get("domain") or "").rstrip("/")
+        current_protocol = str(context.get("protocol") or "")
+
+        if not current_domain or current_domain in default_domains:
+            context["domain"] = role_domain
+        if not current_protocol or current_protocol in default_protocols:
+            context["protocol"] = role_protocol
+        return context
 
     def render_email_parts(self) -> dict[str, Any]:
         context = self.get_context_data()

@@ -26,7 +26,17 @@ class TestTeacherInviteView:
         return APIRequestFactory()
 
     @patch("accounts.email.send_email_task.delay")
-    def test_invite_success(self, mock_send_email, api_rf: APIRequestFactory):
+    def test_invite_success(
+        self,
+        mock_send_email,
+        api_rf: APIRequestFactory,
+        settings,
+    ):
+        settings.FRONTEND_TEACHER_DOMAIN = "https://teachers.kelem.app"
+        settings.FRONTEND_ROLE_DOMAINS = {
+            **settings.FRONTEND_ROLE_DOMAINS,
+            User.Role.TEACHER: settings.FRONTEND_TEACHER_DOMAIN,
+        }
         user = UserFactory()
         branch = BranchFactory(school__organization__owner=user)
 
@@ -49,7 +59,9 @@ class TestTeacherInviteView:
 
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["message"] == "Teacher invitation sent successfully."
-        assert response.data["invitation_url"].startswith(settings.FRONTEND_DOMAIN)
+        assert response.data["invitation_url"].startswith(
+            settings.FRONTEND_TEACHER_DOMAIN,
+        )
         assert "/complete-teacher-invitation/" in response.data["invitation_url"]
 
         new_user = User.objects.get(email="newteacher@example.com")
