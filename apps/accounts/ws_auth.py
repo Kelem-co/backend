@@ -33,7 +33,7 @@ class JwtQueryAuthMiddleware:
         if token:
             try:
                 scope["user"] = await _get_user_from_token(token)
-            except (AuthenticationFailed, InvalidToken):
+            except AuthenticationFailed, InvalidToken:
                 scope["user"] = AnonymousUser()
 
         return await self.inner(scope, receive, send)
