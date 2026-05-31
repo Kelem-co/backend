@@ -30,7 +30,13 @@ class TestParentInviteView:
         mock_send_sms,
         mock_send_email,
         api_rf: APIRequestFactory,
+        settings,
     ):
+        settings.FRONTEND_PARENT_DOMAIN = "https://parents.kelem.app"
+        settings.FRONTEND_ROLE_DOMAINS = {
+            **settings.FRONTEND_ROLE_DOMAINS,
+            User.Role.PARENT: settings.FRONTEND_PARENT_DOMAIN,
+        }
         user = UserFactory()
         branch = BranchFactory(school__organization__owner=user)
 
@@ -52,6 +58,9 @@ class TestParentInviteView:
 
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["message"] == "Parent invitation sent successfully."
+        assert response.data["invitation_url"].startswith(
+            settings.FRONTEND_PARENT_DOMAIN,
+        )
         assert "/complete-parent-invitation/" in response.data["invitation_url"]
         assert response.data["sms_sent"] is True
 

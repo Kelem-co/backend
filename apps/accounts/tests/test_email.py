@@ -9,10 +9,12 @@ from accounts.email import ConfirmationEmail
 from accounts.email import OrganizationApprovalMagicLinkEmail
 from accounts.email import PasswordChangedConfirmationEmail
 from accounts.email import PasswordResetEmail
+from accounts.models import User
+from accounts.tests.factories import UserFactory
 from djoser import utils
 
 if TYPE_CHECKING:
-    from accounts.models import User
+    from accounts.models import User as UserModel
 
 
 pytestmark = pytest.mark.django_db
@@ -44,7 +46,7 @@ def mocked_email_delay(monkeypatch: pytest.MonkeyPatch, settings) -> Mock:
     ],
 )
 def test_djoser_email_classes_render_multipart_content(
-    user: User,
+    user: UserModel,
     mocked_email_delay: Mock,
     email_class: type,
     expected_subject: str,
@@ -81,7 +83,7 @@ def test_djoser_email_classes_render_multipart_content(
 
 
 def test_organization_approval_magic_link_email_renders_multipart_content(
-    user: User,
+    user: UserModel,
     mocked_email_delay: Mock,
 ):
     message = OrganizationApprovalMagicLinkEmail(
@@ -106,4 +108,46 @@ def test_organization_approval_magic_link_email_renders_multipart_content(
     assert (
         "https://frontend.example.com/organization-approval/test-uid/test-token"
         in email_fields["body"]
+    )
+
+
+def test_activation_email_uses_role_specific_frontend_domain(
+    monkeypatch: pytest.MonkeyPatch,
+    settings,
+):
+    settings.FRONTEND_DOMAIN = "https://app.kelem.app"
+    settings.FRONTEND_PROTOCOL = "https"
+    settings.FRONTEND_TEACHER_DOMAIN = "https://teachers.kelem.app"
+    settings.FRONTEND_ROLE_DOMAINS = {
+        User.Role.ORGANIZATION: settings.FRONTEND_DOMAIN,
+        User.Role.BRANCH_ADMIN: settings.FRONTEND_DOMAIN,
+        User.Role.TEACHER: settings.FRONTEND_TEACHER_DOMAIN,
+        User.Role.PARENT: settings.FRONTEND_DOMAIN,
+    }
+    settings.DJOSER = {
+        **settings.DJOSER,
+        "EMAIL_FRONTEND_DOMAIN": settings.FRONTEND_DOMAIN,
+        "EMAIL_FRONTEND_PROTOCOL": settings.FRONTEND_PROTOCOL,
+    }
+    delayed_task = Mock()
+    monkeypatch.setattr("accounts.email.send_email_task.delay", delayed_task)
+    user = UserFactory(role=User.Role.TEACHER)
+
+    message = ActivationEmail(
+        context={
+            "user": user,
+            "domain": settings.FRONTEND_DOMAIN,
+            "protocol": settings.FRONTEND_PROTOCOL,
+            "site_name": "Example Site",
+        },
+    )
+
+    message.send(["teacher@example.com"])
+
+    email_fields = delayed_task.call_args.kwargs["email_fields"]
+    uid = utils.encode_uid(user.pk)
+    assert f"https://teachers.kelem.app/activate/{uid}/" in email_fields["body"]
+    assert (
+        f"https://teachers.kelem.app/activate/{uid}/"
+        in email_fields["alternatives"][0][0]
     )
