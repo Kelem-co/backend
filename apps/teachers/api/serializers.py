@@ -154,7 +154,7 @@ class SectionTeacherScheduleSerializer(serializers.ModelSerializer):
         read_only=True,
     )
     teacher_id = serializers.UUIDField(source="teacher.id", read_only=True)
-    teacher_name = serializers.CharField(source="teacher.user.name", read_only=True)
+    teacher_name = serializers.SerializerMethodField()
     teacher_employee_id = serializers.CharField(
         source="teacher.employee_id",
         read_only=True,
@@ -179,6 +179,11 @@ class SectionTeacherScheduleSerializer(serializers.ModelSerializer):
             "teacher_employee_id",
             "teacher_specialization",
         ]
+
+    def get_teacher_name(self, obj):
+        user = obj.teacher.user
+        parts = [user.name, user.father_name]
+        return " ".join(part.strip() for part in parts if part and part.strip())
 
 
 # ---------------------------------------------------------------------------

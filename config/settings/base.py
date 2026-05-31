@@ -88,6 +88,7 @@ THIRD_PARTY_APPS = [
     "drf_spectacular",
     "djoser",
     "django_filters",
+    "django_erd_generator",
 ]
 
 LOCAL_APPS = [
