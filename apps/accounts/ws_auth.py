@@ -20,6 +20,10 @@ class JwtQueryAuthMiddleware:
         self.inner = inner
 
     async def __call__(self, scope, receive, send):
+        current_user = scope.get("user")
+        if current_user and getattr(current_user, "is_authenticated", False):
+            return await self.inner(scope, receive, send)
+
         query_string = scope.get("query_string", b"").decode("utf-8")
         params = parse_qs(query_string)
         token = params.get("token", [None])[0]
@@ -34,4 +38,4 @@ class JwtQueryAuthMiddleware:
 
 
 def JwtQueryAuthMiddlewareStack(inner):
-    return JwtQueryAuthMiddleware(AuthMiddlewareStack(inner))
+    return AuthMiddlewareStack(JwtQueryAuthMiddleware(inner))
