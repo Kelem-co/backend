@@ -115,11 +115,6 @@ def test_resolve_thread_returns_matching_conversation(db):
     parent = ParentFactory()
     parent.organizations.add(student.organization)
     parent.branches.add(student.branch)
-    ParentStudentLink.objects.create(
-        parent=parent,
-        student=student,
-        relationship_type="MOTHER",
-    )
 
     teacher = TeacherFactory(_student=student)
     _assign_teacher_to_student_section(teacher, student)
