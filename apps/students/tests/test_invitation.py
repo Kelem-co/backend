@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 import pytest
 from accounts.models import User
+from accounts.services import create_parent_login_otp
 from accounts.tests.factories import UserFactory
 from branches.tests.factories import BranchAdminFactory
 from branches.tests.factories import BranchFactory
@@ -11,6 +12,7 @@ from django.contrib.auth.tokens import default_token_generator
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 from rest_framework import status
+from rest_framework.test import APIClient
 from rest_framework.test import APIRequestFactory
 from students.api.views import ParentCompleteInvitationView
 from students.api.views import ParentInviteView
@@ -264,6 +266,10 @@ class TestParentCompleteInvitationView:
     def api_rf(self) -> APIRequestFactory:
         return APIRequestFactory()
 
+    @pytest.fixture
+    def api_client(self) -> APIClient:
+        return APIClient()
+
     def test_complete_success(self, api_rf: APIRequestFactory):
         user = UserFactory(
             role=User.Role.PARENT,
@@ -273,11 +279,18 @@ class TestParentCompleteInvitationView:
         Parent.objects.create(user=user, is_active=False)
         uid = urlsafe_base64_encode(force_bytes(user.pk))
         token = default_token_generator.make_token(user)
+        otp_code = create_parent_login_otp(user=user)
 
         view = ParentCompleteInvitationView.as_view()
         request = api_rf.post(
             "/fake-url/",
-            {"uid": uid, "token": token},
+            {
+                "uid": uid,
+                "token": token,
+                "phone_number": user.phone_number,
+                "otp_code": otp_code,
+                "new_password": "new_secure_password_123",
+            },
         )
 
         response = view(request)
@@ -287,6 +300,88 @@ class TestParentCompleteInvitationView:
         assert user.is_active is True
         assert user.verified_at is not None
         assert user.parent_profile.is_active is True
+        assert user.check_password("new_secure_password_123")
+
+    @patch("students.api.views.ParentInvitationEmail.send")
+    @patch("students.api.views.send_parent_invitation_sms")
+    @patch("accounts.jwt_views.send_parent_otp_sms")
+    def test_invited_parent_can_request_otp_complete_invitation_and_log_in(
+        self,
+        mock_send_otp_sms,
+        mock_send_invitation_sms,
+        mock_send_email,
+        api_client: APIClient,
+        api_rf: APIRequestFactory,
+    ):
+        owner = UserFactory()
+        branch = BranchFactory(school__organization__owner=owner)
+
+        invite_request = api_rf.post(
+            "/fake-url/",
+            {
+                "name": "Invited",
+                "father_name": "Parent",
+                "grandfather_name": "Flow",
+                "phone_number": "+251911111212",
+                "email": "invited-parent@example.com",
+                "branch": branch.id,
+            },
+        )
+        invite_request.user = owner
+
+        invite_response = ParentInviteView.as_view()(invite_request)
+
+        assert invite_response.status_code == status.HTTP_201_CREATED
+        invited_user = User.objects.get(phone_number="+251911111212")
+        assert invited_user.is_active is False
+        assert invited_user.parent_profile.is_active is False
+
+        otp_response = api_client.post(
+            "/auth/otp/request/",
+            {"phone_number": invited_user.phone_number},
+            format="json",
+        )
+
+        assert otp_response.status_code == status.HTTP_200_OK
+        otp = invited_user.parent_login_otps.first()
+        assert otp is not None
+
+        uid = urlsafe_base64_encode(force_bytes(invited_user.pk))
+        token = default_token_generator.make_token(invited_user)
+        otp_code = create_parent_login_otp(user=invited_user)
+
+        complete_response = api_client.post(
+            "/api/parents/complete-invitation/",
+            {
+                "uid": uid,
+                "token": token,
+                "phone_number": invited_user.phone_number,
+                "otp_code": otp_code,
+                "new_password": "new_secure_password_123",
+            },
+            format="json",
+        )
+
+        assert complete_response.status_code == status.HTTP_200_OK
+        invited_user.refresh_from_db()
+        assert invited_user.is_active is True
+        assert invited_user.parent_profile.is_active is True
+
+        login_response = api_client.post(
+            "/auth/jwt/create/",
+            {
+                "phone_number": invited_user.phone_number,
+                "password": "new_secure_password_123",
+            },
+            format="json",
+        )
+
+        assert login_response.status_code == status.HTTP_200_OK
+        assert "access" in login_response.data
+        assert "refresh" in login_response.data
+        assert mock_send_invitation_sms.called
+        assert mock_send_otp_sms.called
+        assert mock_send_email.called
 
     def test_complete_invalid_token(self, api_rf: APIRequestFactory):
         user = UserFactory(
@@ -296,14 +391,99 @@ class TestParentCompleteInvitationView:
         )
         Parent.objects.create(user=user)
         uid = urlsafe_base64_encode(force_bytes(user.pk))
+        otp_code = create_parent_login_otp(user=user)
 
         view = ParentCompleteInvitationView.as_view()
         request = api_rf.post(
             "/fake-url/",
-            {"uid": uid, "token": "invalid-token"},
+            {
+                "uid": uid,
+                "token": "invalid-token",
+                "phone_number": user.phone_number,
+                "otp_code": otp_code,
+                "new_password": "new_secure_password_123",
+            },
         )
 
         response = view(request)
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert response.data["errors"][0]["field"] == "token"
+
+    def test_complete_rejects_phone_mismatch(self, api_client: APIClient):
+        user = UserFactory(
+            role=User.Role.PARENT,
+            is_active=False,
+            phone_number="+251911111209",
+        )
+        Parent.objects.create(user=user, is_active=False)
+        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        token = default_token_generator.make_token(user)
+        otp_code = create_parent_login_otp(user=user)
+
+        response = api_client.post(
+            "/api/parents/complete-invitation/",
+            {
+                "uid": uid,
+                "token": token,
+                "phone_number": "+251911111299",
+                "otp_code": otp_code,
+                "new_password": "new_secure_password_123",
+            },
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data["errors"][0]["field"] == "phone_number"
+
+    def test_complete_rejects_invalid_otp(self, api_client: APIClient):
+        user = UserFactory(
+            role=User.Role.PARENT,
+            is_active=False,
+            phone_number="+251911111210",
+        )
+        Parent.objects.create(user=user, is_active=False)
+        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        token = default_token_generator.make_token(user)
+        create_parent_login_otp(user=user)
+
+        response = api_client.post(
+            "/api/parents/complete-invitation/",
+            {
+                "uid": uid,
+                "token": token,
+                "phone_number": user.phone_number,
+                "otp_code": "000000",
+                "new_password": "new_secure_password_123",
+            },
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data["errors"][0]["field"] == "otp_code"
+
+    def test_complete_rejects_weak_password(self, api_client: APIClient):
+        user = UserFactory(
+            role=User.Role.PARENT,
+            is_active=False,
+            phone_number="+251911111211",
+        )
+        Parent.objects.create(user=user, is_active=False)
+        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        token = default_token_generator.make_token(user)
+        otp_code = create_parent_login_otp(user=user)
+
+        response = api_client.post(
+            "/api/parents/complete-invitation/",
+            {
+                "uid": uid,
+                "token": token,
+                "phone_number": user.phone_number,
+                "otp_code": otp_code,
+                "new_password": "123",
+            },
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data["errors"][0]["field"] == "new_password"

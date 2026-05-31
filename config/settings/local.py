@@ -72,4 +72,14 @@ INSTALLED_APPS += ["django_extensions"]
 CELERY_TASK_EAGER_PROPAGATES = True
 # Your stuff...
 # ------------------------------------------------------------------------------
-CORS_ALLOW_ALL_ORIGINS = True
+# Keep explicit origin allowlist behavior from base settings so
+# credentialed cross-origin requests (with cookies/auth) work correctly.
+CORS_ALLOW_ALL_ORIGINS = False
+
+# JWT refresh cookie defaults for HTTPS cross-origin local tunnels (e.g. trycloudflare)
+# These can still be overridden via environment variables.
+JWT_REFRESH_COOKIE_SECURE = env.bool("JWT_REFRESH_COOKIE_SECURE", default=True)
+JWT_REFRESH_COOKIE_SAMESITE = env(
+    "JWT_REFRESH_COOKIE_SAMESITE",
+    default="None",
+)

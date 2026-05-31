@@ -1,15 +1,60 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from accounts.models import User
 from accounts.services import normalize_phone_number
+from django.contrib.auth import authenticate
+from django.contrib.auth.models import update_last_login
 from django.utils.encoding import force_str
 from django.utils.http import urlsafe_base64_decode
+from rest_framework import exceptions
 from rest_framework import serializers
+from rest_framework_simplejwt.authentication import default_user_authentication_rule
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework_simplejwt.settings import api_settings
 from students.models import Parent
+
+if TYPE_CHECKING:
+    from django.http import HttpRequest
 
 NO_ACTIVE_PARENT_ACCOUNT_MESSAGE = (
     "No active parent account was found for this phone number."
 )
+INCONSISTENT_PARENT_ACCOUNT_STATE_MESSAGE = "Parent account state is inconsistent. Please re-send the invitation or contact support."  # noqa: E501
+
+
+def authenticate_phone_or_email_credentials(
+    *,
+    request: HttpRequest | None,
+    email: str,
+    phone_number: str,
+    password: str,
+) -> User | None:
+    normalized_email = email.strip()
+    normalized_phone = phone_number.strip()
+    if normalized_phone:
+        try:
+            normalized_phone = normalize_phone_number(normalized_phone)
+        except ValueError:
+            return None
+
+        user = User.objects.filter(
+            phone_number=normalized_phone,
+            role=User.Role.PARENT,
+        ).first()
+        if user is None or not user.check_password(password):
+            return None
+        return user
+
+    if not normalized_email:
+        return None
+
+    return authenticate(
+        request=request,
+        email=normalized_email,
+        password=password,
+    )
 
 
 class ApprovalMagicLinkExchangeSerializer(serializers.Serializer):
@@ -53,7 +98,6 @@ class ParentOTPRequestSerializer(serializers.Serializer):
             user = User.objects.get(
                 phone_number=normalized,
                 role=User.Role.PARENT,
-                is_active=True,
             )
         except User.DoesNotExist as err:
             raise serializers.ValidationError(
@@ -67,8 +111,10 @@ class ParentOTPRequestSerializer(serializers.Serializer):
                 NO_ACTIVE_PARENT_ACCOUNT_MESSAGE,
             ) from err
 
-        if not parent_profile.is_active:
-            raise serializers.ValidationError(NO_ACTIVE_PARENT_ACCOUNT_MESSAGE)
+        if user.is_active != parent_profile.is_active:
+            raise serializers.ValidationError(
+                INCONSISTENT_PARENT_ACCOUNT_STATE_MESSAGE,
+            )
 
         self.context["target_user"] = user
         return normalized
@@ -85,3 +131,57 @@ class ParentOTPVerifySerializer(serializers.Serializer):
         )
         request_serializer.is_valid(raise_exception=True)
         return request_serializer.validated_data["phone_number"]
+
+
+class ParentPhoneOrEmailTokenObtainPairSerializer(TokenObtainPairSerializer):
+    email = serializers.CharField(required=False, allow_blank=True)
+    phone_number = serializers.CharField(required=False, allow_blank=True)
+    password = serializers.CharField(trim_whitespace=False)
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        email_field = self.fields.get(self.username_field)
+        if email_field is not None:
+            email_field.required = False
+            email_field.allow_blank = True
+
+    def validate(
+        self,
+        attrs: dict[str, str],
+    ) -> dict[str, str]:
+        email = attrs.get("email", "")
+        phone_number = attrs.get("phone_number", "")
+        password = attrs.get("password", "")
+
+        if not email.strip() and not phone_number.strip():
+            raise serializers.ValidationError(
+                {
+                    "email": "Provide an email or phone number.",
+                    "phone_number": "Provide a phone number or email.",
+                },
+            )
+
+        user = authenticate_phone_or_email_credentials(
+            request=self.context.get("request"),
+            email=email,
+            phone_number=phone_number,
+            password=password,
+        )
+        if user is None or not default_user_authentication_rule(user):
+            raise exceptions.AuthenticationFailed(
+                self.error_messages["no_active_account"],
+                "no_active_account",
+            )
+
+        self.user = user
+
+        refresh = self.get_token(user)
+        data = {
+            "refresh": str(refresh),
+            "access": str(refresh.access_token),
+        }
+
+        if api_settings.UPDATE_LAST_LOGIN:
+            update_last_login(None, user)
+
+        return data

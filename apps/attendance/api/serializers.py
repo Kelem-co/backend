@@ -246,6 +246,58 @@ class ParentReasonUpdateSerializer(serializers.ModelSerializer):
         return super().update(instance, validated_data)
 
 
+class ParentReasonCreateSerializer(serializers.ModelSerializer):
+    attendance = serializers.PrimaryKeyRelatedField(
+        queryset=Attendance.objects.select_related(
+            "student",
+            "organization",
+        ),
+    )
+
+    class Meta:
+        model = AttendanceReason
+        fields = [
+            "id",
+            "attendance",
+            "reason_category",
+            "note",
+            "parent_confirmed",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+    def validate(self, attrs):
+        attendance = attrs["attendance"]
+        if not attendance.needs_reason:
+            raise ValidationError(
+                {"attendance": "This attendance record does not require a reason."},
+            )
+        return attrs
+
+    def create(self, validated_data):
+        request = self.context["request"]
+        attendance = validated_data["attendance"]
+        defaults = {
+            "organization": attendance.organization,
+            "reason_category": validated_data["reason_category"],
+            "note": validated_data.get("note", ""),
+            "parent_confirmed": validated_data.get("parent_confirmed", True),
+        }
+        if defaults["parent_confirmed"]:
+            defaults["confirmed_by"] = request.user
+            defaults["confirmed_at"] = timezone.now()
+        else:
+            defaults["confirmed_by"] = None
+            defaults["confirmed_at"] = None
+
+        reason, _created = AttendanceReason.objects.update_or_create(
+            attendance=attendance,
+            defaults=defaults,
+        )
+        return reason
+
+
 # ---------------------------------------------------------------------------
 # AttendanceSummary
 # ---------------------------------------------------------------------------

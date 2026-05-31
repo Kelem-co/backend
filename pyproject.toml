@@ -29,6 +29,7 @@ dependencies = [
   "django-cors-headers==4.9.0",
   "django-crispy-forms==2.6",
   "django-environ==0.13.0",
+  "django-erd-generator==0.1.7",
   "django-filter>=25.2",
   "django-model-utils==5.0.0",
   "django-redis==6.0.0",
@@ -81,8 +82,8 @@ dev = [
 packages.find.include = [ "config*", "core*" ]
 
 [tool.ruff]
-# Exclude a variety of commonly ignored directories.
-extend-exclude = [ "*/migrations/*.py", "staticfiles/*" ]
+# Exclude generated and agent-managed files.
+extend-exclude = [ "*/migrations/*.py", ".agents/*", "agents/*", "staticfiles/*" ]
 lint.select = [
   "A",
   "ASYNC",
@@ -141,6 +142,7 @@ lint.ignore = [
   # Deactivated because it can make the code slow:
   # https://github.com/astral-sh/ruff/issues/7871
 ]
+lint.per-file-ignores = { "apps/assessments/tests/test_api.py" = [ "PLR0913" ] }
 lint.isort.force-single-line = true
 
 [tool.pyproject-fmt]

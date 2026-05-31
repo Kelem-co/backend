@@ -9,6 +9,7 @@ from analytics.api.views import InterventionLogViewSet
 from announcements.api.views import AnnouncementViewSet
 from assessments.api.views import AssessmentResultViewSet
 from assessments.api.views import AssessmentViewSet
+from assessments.api.views import HomeworkConfirmationViewSet
 from attendance.api.views import AttendanceReasonViewSet
 from attendance.api.views import AttendanceSummaryViewSet
 from attendance.api.views import AttendanceViewSet
@@ -91,6 +92,11 @@ router.register(
     "assessment-results",
     AssessmentResultViewSet,
     basename="assessment-result",
+)
+router.register(
+    "homework-confirmations",
+    HomeworkConfirmationViewSet,
+    basename="homework-confirmation",
 )
 router.register("announcements", AnnouncementViewSet, basename="announcement")
 

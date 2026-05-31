@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.db import models
 from django.utils.translation import gettext_lazy as _
@@ -238,3 +239,134 @@ class AssessmentResult(UUIDModel, TimeStampedModel):
         if self.obtained_marks is None or pm is None:
             return False
         return self.obtained_marks < pm
+
+
+class HomeworkConfirmation(UUIDModel, TimeStampedModel):
+    organization = models.ForeignKey(
+        "organizations.Organization",
+        on_delete=models.CASCADE,
+        related_name="homework_confirmations",
+        verbose_name=_("Organization"),
+    )
+    branch = models.ForeignKey(
+        "branches.Branch",
+        on_delete=models.CASCADE,
+        related_name="homework_confirmations",
+        verbose_name=_("Branch"),
+    )
+    section = models.ForeignKey(
+        "academics.Section",
+        on_delete=models.CASCADE,
+        related_name="homework_confirmations",
+        verbose_name=_("Section"),
+    )
+    assessment = models.ForeignKey(
+        Assessment,
+        on_delete=models.CASCADE,
+        related_name="homework_confirmations",
+        verbose_name=_("Assessment"),
+    )
+    student = models.ForeignKey(
+        "students.Student",
+        on_delete=models.CASCADE,
+        related_name="homework_confirmations",
+        verbose_name=_("Student"),
+    )
+    is_confirmed = models.BooleanField(_("Is Confirmed"), default=False)
+    confirmed_at = models.DateTimeField(_("Confirmed At"), null=True, blank=True)
+    feedback = models.TextField(_("Feedback"), blank=True)
+    confirmed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="homework_confirmations",
+        verbose_name=_("Confirmed By"),
+    )
+
+    class Meta:
+        verbose_name = _("Homework Confirmation")
+        verbose_name_plural = _("Homework Confirmations")
+        ordering = ["-created_at"]
+        unique_together = ("assessment", "student")
+        indexes = [
+            models.Index(fields=["organization", "is_confirmed"]),
+            models.Index(fields=["branch", "section"]),
+            models.Index(fields=["assessment", "student"]),
+        ]
+
+    def __str__(self):
+        return f"{self.student} | {self.assessment.title} | {self.is_confirmed}"
+
+    def clean(self):
+        super().clean()
+        errors = {}
+        self._validate_homework_assessment(errors)
+        self._validate_student_context(errors)
+        self._validate_organization(errors)
+        self._validate_branch(errors)
+        self._validate_section(errors)
+
+        if errors:
+            raise ValidationError(errors)
+
+    def _validate_homework_assessment(self, errors):
+        if (
+            self.assessment_id
+            and self.assessment.task_type != Assessment.TaskType.HOMEWORK
+        ):
+            errors["assessment"] = _(
+                "Homework confirmations are only valid for homework assessments.",
+            )
+
+    def _validate_student_context(self, errors):
+        if not (self.assessment_id and self.student_id):
+            return
+
+        if self.student.branch_id != self.assessment.branch_id:
+            errors["student"] = _(
+                "Student must belong to the same branch as the assessment.",
+            )
+            return
+
+        if self.student.organization_id != self.assessment.organization_id:
+            errors["student"] = _(
+                "Student must belong to the same organization as the assessment.",
+            )
+            return
+
+        if (
+            self.student.current_section_id
+            != self.assessment.teacher_assignment.section_id
+        ):
+            errors["student"] = _(
+                "Student must belong to the assessment's section.",
+            )
+
+    def _validate_organization(self, errors):
+        if (
+            self.organization_id
+            and self.assessment_id
+            and self.organization_id != self.assessment.organization_id
+        ):
+            errors["organization"] = _(
+                "Organization must match the assessment organization.",
+            )
+
+    def _validate_branch(self, errors):
+        if (
+            self.branch_id
+            and self.assessment_id
+            and self.branch_id != self.assessment.branch_id
+        ):
+            errors["branch"] = _("Branch must match the assessment branch.")
+
+    def _validate_section(self, errors):
+        if (
+            self.section_id
+            and self.assessment_id
+            and self.section_id != self.assessment.teacher_assignment.section_id
+        ):
+            errors["section"] = _(
+                "Section must match the assessment section.",
+            )

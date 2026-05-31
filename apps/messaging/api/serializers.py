@@ -45,6 +45,7 @@ class ChatMessageSerializer(serializers.ModelSerializer):
 class ChatThreadSerializer(serializers.ModelSerializer):
     unread_count = serializers.SerializerMethodField()
     last_read_at = serializers.SerializerMethodField()
+    latest_message = serializers.SerializerMethodField()
 
     class Meta:
         model = ChatThread
@@ -57,6 +58,7 @@ class ChatThreadSerializer(serializers.ModelSerializer):
             "branch",
             "unread_count",
             "last_read_at",
+            "latest_message",
             "created_at",
             "updated_at",
         ]
@@ -68,6 +70,7 @@ class ChatThreadSerializer(serializers.ModelSerializer):
             "updated_at",
             "unread_count",
             "last_read_at",
+            "latest_message",
         ]
 
     def get_unread_count(self, obj):
@@ -89,6 +92,16 @@ class ChatThreadSerializer(serializers.ModelSerializer):
             reader=request.user,
         ).aggregate(last=Max("read_at"))
         return result["last"]
+
+    def get_latest_message(self, obj):
+        latest = (
+            obj.messages.select_related("sender", "attachment")
+            .order_by("created_at")
+            .last()
+        )
+        if latest is None:
+            return None
+        return ChatMessageSerializer(latest, context=self.context).data
 
     def validate(self, attrs):
         allowed = can_create_thread(
@@ -129,7 +142,7 @@ class MarkReadSerializer(serializers.Serializer):
         message_id = self.validated_data.get("message_id")
         now = timezone.now()
 
-        qs = thread.messages.exclude(sender=user)
+        qs = thread.messages.exclude(sender=user).exclude(read_receipts__reader=user)
         if message_id:
             qs = qs.filter(id=message_id)
 
@@ -140,8 +153,18 @@ class MarkReadSerializer(serializers.Serializer):
                 reader=user,
                 defaults={"read_at": now},
             )
-            if not was_created and obj.read_at < now:
-                obj.read_at = now
-                obj.save(update_fields=["read_at", "updated_at"])
-            created.append(obj)
+            if was_created:
+                created.append(obj)
         return created
+
+
+class ResolveThreadSerializer(serializers.Serializer):
+    student = serializers.UUIDField(required=True)
+    teacher = serializers.UUIDField(required=False)
+    parent = serializers.UUIDField(required=False)
+
+    def validate(self, attrs):
+        if not attrs.get("teacher") and not attrs.get("parent"):
+            message = "Either teacher or parent is required to resolve a thread."
+            raise serializers.ValidationError(message)
+        return attrs

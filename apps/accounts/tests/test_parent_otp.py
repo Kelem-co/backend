@@ -3,8 +3,11 @@ from __future__ import annotations
 from datetime import timedelta
 from http import HTTPStatus
 from unittest.mock import patch
+from uuid import uuid4
 
 import pytest
+from accounts.api.auth_serializers import INCONSISTENT_PARENT_ACCOUNT_STATE_MESSAGE
+from accounts.api.auth_serializers import NO_ACTIVE_PARENT_ACCOUNT_MESSAGE
 from accounts.models import ParentLoginOTP
 from accounts.models import User
 from accounts.services import create_parent_login_otp
@@ -67,7 +70,43 @@ def test_parent_otp_verify_returns_tokens(
 
     assert response.status_code == HTTPStatus.OK
     assert "access" in response.data
-    assert "refresh" in response.data
+    assert "refresh" not in response.data
+    assert "refresh_token" in response.cookies
+
+
+@pytest.mark.django_db
+def test_jwt_refresh_uses_cookie(
+    api_client: APIClient,
+    active_parent_user: User,
+):
+    otp_code = create_parent_login_otp(user=active_parent_user)
+    verify_response = api_client.post(
+        "/auth/otp/verify/",
+        {
+            "phone_number": active_parent_user.phone_number,
+            "otp_code": otp_code,
+        },
+        format="json",
+    )
+    assert verify_response.status_code == HTTPStatus.OK
+    assert "refresh_token" in verify_response.cookies
+
+    refresh_cookie = verify_response.cookies["refresh_token"].value
+    api_client.cookies["refresh_token"] = refresh_cookie
+    refresh_response = api_client.post("/auth/jwt/refresh/", {}, format="json")
+    assert refresh_response.status_code == HTTPStatus.OK
+    assert "access" in refresh_response.data
+
+
+@pytest.mark.django_db
+def test_logout_clears_refresh_cookie(
+    api_client: APIClient,
+):
+    api_client.cookies["refresh_token"] = str(uuid4())
+    response = api_client.post("/auth/logout/", {}, format="json")
+    assert response.status_code == HTTPStatus.OK
+    assert "refresh_token" in response.cookies
+    assert response.cookies["refresh_token"]["max-age"] == 0
 
 
 @pytest.mark.django_db
@@ -160,6 +199,57 @@ def test_parent_otp_request_rejects_inactive_parent(api_client: APIClient):
 
     assert response.status_code == HTTPStatus.BAD_REQUEST
     assert response.data["errors"][0]["field"] == "phone_number"
+    assert response.data["errors"][0]["detail"] == (
+        INCONSISTENT_PARENT_ACCOUNT_STATE_MESSAGE
+    )
+
+
+@pytest.mark.django_db
+def test_parent_otp_request_rejects_active_user_with_inactive_parent(
+    api_client: APIClient,
+):
+    user = UserFactory(
+        role=User.Role.PARENT,
+        is_active=True,
+        phone_number="+251911111304",
+    )
+    Parent.objects.create(user=user, is_active=False)
+
+    response = api_client.post(
+        "/auth/otp/request/",
+        {"phone_number": user.phone_number},
+        format="json",
+    )
+
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+    assert response.data["errors"][0]["field"] == "phone_number"
+    assert response.data["errors"][0]["detail"] == (
+        INCONSISTENT_PARENT_ACCOUNT_STATE_MESSAGE
+    )
+
+
+@pytest.mark.django_db
+@patch("accounts.jwt_views.send_parent_otp_sms")
+def test_parent_otp_request_allows_pending_invited_parent(
+    mock_send_sms,
+    api_client: APIClient,
+):
+    user = UserFactory(
+        role=User.Role.PARENT,
+        is_active=False,
+        phone_number="+251911111399",
+    )
+    Parent.objects.create(user=user, is_active=False)
+
+    response = api_client.post(
+        "/auth/otp/request/",
+        {"phone_number": user.phone_number},
+        format="json",
+    )
+
+    assert response.status_code == HTTPStatus.OK
+    assert ParentLoginOTP.objects.filter(user=user).count() == 1
+    assert mock_send_sms.called
 
 
 @pytest.mark.django_db
@@ -178,3 +268,23 @@ def test_parent_otp_request_rejects_non_parent_user(api_client: APIClient):
 
     assert response.status_code == HTTPStatus.BAD_REQUEST
     assert response.data["errors"][0]["field"] == "phone_number"
+    assert response.data["errors"][0]["detail"] == NO_ACTIVE_PARENT_ACCOUNT_MESSAGE
+
+
+@pytest.mark.django_db
+def test_parent_otp_request_rejects_parent_without_profile(api_client: APIClient):
+    user = UserFactory(
+        role=User.Role.PARENT,
+        is_active=False,
+        phone_number="+251911111305",
+    )
+
+    response = api_client.post(
+        "/auth/otp/request/",
+        {"phone_number": user.phone_number},
+        format="json",
+    )
+
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+    assert response.data["errors"][0]["field"] == "phone_number"
+    assert response.data["errors"][0]["detail"] == NO_ACTIVE_PARENT_ACCOUNT_MESSAGE

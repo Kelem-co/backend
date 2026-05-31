@@ -1,5 +1,6 @@
 from assessments.models import Assessment
 from assessments.models import AssessmentResult
+from assessments.models import HomeworkConfirmation
 from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
@@ -163,6 +164,11 @@ class AssessmentResultReadSerializer(AssessmentResultSerializer):
         read_only=True,
     )
     assessment_title = serializers.CharField(source="assessment.title", read_only=True)
+    task_type = serializers.CharField(source="assessment.task_type", read_only=True)
+    task_type_display = serializers.CharField(
+        source="assessment.get_task_type_display",
+        read_only=True,
+    )
     total_marks = serializers.DecimalField(
         source="assessment.total_marks",
         max_digits=6,
@@ -182,6 +188,27 @@ class AssessmentResultReadSerializer(AssessmentResultSerializer):
         read_only=True,
         default=None,
     )
+    assessment_description = serializers.CharField(
+        source="assessment.description",
+        read_only=True,
+    )
+    assessment_due_date = serializers.DateField(
+        source="assessment.due_date",
+        read_only=True,
+    )
+    student_id = serializers.UUIDField(source="student.id", read_only=True)
+    assessment_id = serializers.UUIDField(source="assessment.id", read_only=True)
+    branch_id = serializers.UUIDField(source="assessment.branch.id", read_only=True)
+    branch_name = serializers.CharField(source="assessment.branch.name", read_only=True)
+    subject_id = serializers.UUIDField(
+        source="assessment.teacher_assignment.subject.id",
+        read_only=True,
+    )
+    section_id = serializers.UUIDField(
+        source="assessment.teacher_assignment.section.id",
+        read_only=True,
+    )
+    homework_confirmation = serializers.SerializerMethodField()
 
     class Meta(AssessmentResultSerializer.Meta):
         fields = [
@@ -192,15 +219,37 @@ class AssessmentResultReadSerializer(AssessmentResultSerializer):
             "section_name",
             "subject_name",
             "assessment_title",
+            "task_type",
+            "task_type_display",
+            "assessment_description",
+            "assessment_due_date",
+            "student_id",
+            "assessment_id",
+            "branch_id",
+            "branch_name",
+            "subject_id",
             "total_marks",
             "passing_marks",
             "percentage",
             "is_below_passing",
             "graded_by_name",
+            "section_id",
+            "homework_confirmation",
         ]
 
     def get_student_name(self, obj) -> str:
         return f"{obj.student.first_name} {obj.student.last_name}"
+
+    def get_homework_confirmation(self, obj):
+        confirmation = getattr(obj, "homework_confirmation", None)
+        if confirmation is None:
+            return None
+        return {
+            "id": str(confirmation.id),
+            "is_confirmed": confirmation.is_confirmed,
+            "feedback": confirmation.feedback,
+            "confirmed_at": confirmation.confirmed_at,
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -318,3 +367,166 @@ class ParentHomeworkConfirmSerializer(serializers.ModelSerializer):
             instance.parent_confirmed_by = self.context["request"].user
             instance.parent_confirmed_at = timezone.now()
         return super().update(instance, validated_data)
+
+
+class HomeworkConfirmationSerializer(serializers.ModelSerializer):
+    assessment = serializers.PrimaryKeyRelatedField(
+        queryset=Assessment.objects.select_related(
+            "teacher_assignment__section",
+            "organization",
+            "branch",
+        ),
+    )
+    student = serializers.PrimaryKeyRelatedField(
+        queryset=__import__(
+            "students.models",
+            fromlist=["Student"],
+        ).Student.objects.select_related("current_section", "organization", "branch"),
+    )
+
+    class Meta:
+        model = HomeworkConfirmation
+        validators = []
+        fields = [
+            "id",
+            "organization",
+            "branch",
+            "section",
+            "assessment",
+            "student",
+            "is_confirmed",
+            "confirmed_at",
+            "feedback",
+            "confirmed_by",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id",
+            "organization",
+            "branch",
+            "section",
+            "confirmed_at",
+            "confirmed_by",
+            "created_at",
+            "updated_at",
+        ]
+
+    def validate(self, attrs):
+        assessment = attrs["assessment"]
+        student = attrs["student"]
+        if assessment.task_type != Assessment.TaskType.HOMEWORK:
+            raise ValidationError(
+                {"assessment": "Only homework assessments can be confirmed."},
+            )
+        if student.branch_id != assessment.branch_id:
+            raise ValidationError(
+                {
+                    "student": (
+                        "Student must belong to the same branch as the assessment."
+                    ),
+                },
+            )
+        if student.organization_id != assessment.organization_id:
+            raise ValidationError(
+                {
+                    "student": (
+                        "Student must belong to the same organization as the "
+                        "assessment."
+                    ),
+                },
+            )
+        if student.current_section_id != assessment.teacher_assignment.section_id:
+            raise ValidationError(
+                {"student": "Student must belong to the assessment's section."},
+            )
+        return attrs
+
+    def create(self, validated_data):
+        request = self.context["request"]
+        assessment = validated_data["assessment"]
+        student = validated_data["student"]
+        existing_confirmation = HomeworkConfirmation.objects.filter(
+            assessment=assessment,
+            student=student,
+        ).first()
+        defaults = {
+            "organization": assessment.organization,
+            "branch": assessment.branch,
+            "section": assessment.teacher_assignment.section,
+            "assessment": assessment,
+            "student": student,
+            "is_confirmed": validated_data["is_confirmed"],
+            "feedback": validated_data.get("feedback", ""),
+        }
+        if defaults["is_confirmed"]:
+            defaults["confirmed_at"] = (
+                existing_confirmation.confirmed_at
+                if existing_confirmation and existing_confirmation.confirmed_at
+                else timezone.now()
+            )
+            defaults["confirmed_by"] = request.user
+        else:
+            defaults["confirmed_at"] = None
+            defaults["confirmed_by"] = None
+
+        confirmation, _created = HomeworkConfirmation.objects.update_or_create(
+            assessment=assessment,
+            student=student,
+            defaults=defaults,
+        )
+        confirmation.full_clean()
+        confirmation.save()
+        return confirmation
+
+
+class TodaysHomeworkReadSerializer(serializers.Serializer):
+    id = serializers.UUIDField(source="assessment.id")
+    title = serializers.CharField(source="assessment.title")
+    description = serializers.CharField(source="assessment.description")
+    due_date = serializers.DateField(source="assessment.due_date")
+    teacher_name = serializers.CharField(
+        source="assessment.teacher_assignment.teacher.user.name",
+    )
+    subject_name = serializers.CharField(
+        source="assessment.teacher_assignment.subject.name",
+    )
+    section_name = serializers.CharField(
+        source="assessment.teacher_assignment.section.name",
+    )
+    branch_id = serializers.UUIDField(source="assessment.branch.id")
+    branch_name = serializers.CharField(source="assessment.branch.name")
+    student_id = serializers.SerializerMethodField()
+    student_name = serializers.SerializerMethodField()
+    student_roll_no = serializers.SerializerMethodField()
+    confirmed = serializers.BooleanField()
+    homework_confirmation = serializers.SerializerMethodField()
+
+    def get_student_id(self, obj):
+        student = obj.get("student")
+        if student is None:
+            return None
+        return str(student.id)
+
+    def get_student_name(self, obj) -> str:
+        student = obj["student"]
+        if student is None:
+            return None
+        return f"{student.first_name} {student.last_name}"
+
+    def get_student_roll_no(self, obj):
+        student = obj.get("student")
+        if student is None:
+            return None
+        return student.roll_no
+
+    def get_homework_confirmation(self, obj):
+        confirmation = obj.get("homework_confirmation")
+        if confirmation is None:
+            return None
+        return {
+            "id": str(confirmation.id),
+            "is_confirmed": confirmation.is_confirmed,
+            "feedback": confirmation.feedback,
+            "confirmed_at": confirmation.confirmed_at,
+        }

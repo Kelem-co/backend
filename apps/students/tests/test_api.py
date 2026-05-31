@@ -26,6 +26,8 @@ from teachers.models import TeacherSubjectAssignment
 from media.models import StatusChoices
 from media.tests.factories import MediaFileFactory
 
+MIN_EXPECTED_MATCHED_STUDENTS = 2
+
 
 @pytest.mark.django_db
 class TestStudentsAPI:
@@ -397,6 +399,145 @@ class TestStudentsAPI:
 
         assert response.status_code == status.HTTP_200_OK
         assert [item["id"] for item in response.data["results"]] == [str(student.id)]
+
+    def test_student_list_supports_ordering_ascending_and_descending(
+        self,
+        api_client,
+        user,
+        organization,
+        branch,
+        section,
+    ):
+        api_client.force_authenticate(user=user)
+        StudentFactory(
+            organization=organization,
+            branch=branch,
+            current_section=section,
+            first_name="Bravo",
+            last_name="One",
+            roll_no="R103",
+        )
+        StudentFactory(
+            organization=organization,
+            branch=branch,
+            current_section=section,
+            first_name="Alpha",
+            last_name="One",
+            roll_no="R101",
+        )
+        StudentFactory(
+            organization=organization,
+            branch=branch,
+            current_section=section,
+            first_name="Charlie",
+            last_name="One",
+            roll_no="R105",
+        )
+
+        asc_response = api_client.get(
+            f"/api/students/?branch={branch.id}&organization={organization.id}&ordering=first_name",
+        )
+        assert asc_response.status_code == status.HTTP_200_OK
+        asc_names = [item["first_name"] for item in asc_response.data["results"]]
+        assert asc_names == sorted(asc_names)
+
+        desc_response = api_client.get(
+            f"/api/students/?branch={branch.id}&organization={organization.id}&ordering=-first_name",
+        )
+        assert desc_response.status_code == status.HTTP_200_OK
+        desc_names = [item["first_name"] for item in desc_response.data["results"]]
+        assert desc_names == sorted(desc_names, reverse=True)
+
+    def test_student_list_supports_ordering_with_search_and_filters(
+        self,
+        api_client,
+        user,
+        organization,
+        branch,
+        section,
+    ):
+        api_client.force_authenticate(user=user)
+        target_grade = section.grade
+        eden = StudentFactory(
+            organization=organization,
+            branch=branch,
+            current_section=section,
+            first_name="Eden",
+            last_name="Match",
+            roll_no="MATCH-2",
+        )
+        StudentAcademicYearSectionFactory(
+            student=eden,
+            academic_year=section.academic_year,
+            section=section,
+        )
+        abel = StudentFactory(
+            organization=organization,
+            branch=branch,
+            current_section=section,
+            first_name="Abel",
+            last_name="Match",
+            roll_no="MATCH-1",
+        )
+        StudentAcademicYearSectionFactory(
+            student=abel,
+            academic_year=section.academic_year,
+            section=section,
+        )
+        other_grade = GradeFactory(organization=organization, branch=branch)
+        other_section = SectionFactory(
+            organization=organization,
+            branch=branch,
+            grade=other_grade,
+            academic_year=section.academic_year,
+        )
+        zulu = StudentFactory(
+            organization=organization,
+            branch=branch,
+            current_section=other_section,
+            first_name="Zulu",
+            last_name="Match",
+            roll_no="MATCH-9",
+        )
+        StudentAcademicYearSectionFactory(
+            student=zulu,
+            academic_year=section.academic_year,
+            section=other_section,
+        )
+
+        response = api_client.get(
+            f"/api/students/?branch={branch.id}&organization={organization.id}"
+            f"&academic_year={section.academic_year_id}&grade={target_grade.id}"
+            "&search=match&ordering=first_name",
+        )
+        assert response.status_code == status.HTTP_200_OK
+
+        results = response.data["results"]
+        assert len(results) >= MIN_EXPECTED_MATCHED_STUDENTS
+        names = [item["first_name"] for item in results]
+        assert names == sorted(names)
+        assert all(item["grade_id"] == str(target_grade.id) for item in results)
+        assert all("match" in item["last_name"].lower() for item in results)
+
+    def test_student_list_ignores_invalid_ordering_field(
+        self,
+        api_client,
+        user,
+        organization,
+        branch,
+        section,
+    ):
+        api_client.force_authenticate(user=user)
+        StudentFactory(
+            organization=organization,
+            branch=branch,
+            current_section=section,
+        )
+
+        response = api_client.get(
+            f"/api/students/?branch={branch.id}&organization={organization.id}&ordering=not_a_field",
+        )
+        assert response.status_code == status.HTTP_200_OK
 
     def test_parent_crud_and_custom_endpoints(
         self,
@@ -999,6 +1140,7 @@ class TestStudentsAPI:
             "academic_year",
             "status",
             "gender",
+            "ordering",
         }.issubset(parameter_names)
 
     def test_parent_schema_lists_manual_filters(self, api_client):

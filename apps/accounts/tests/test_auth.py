@@ -246,6 +246,77 @@ class TestOrganizationJwtLogin:
 
 
 @pytest.mark.django_db
+class TestParentJwtPhoneLogin:
+    @pytest.fixture
+    def api_client(self) -> APIClient:
+        return APIClient()
+
+    def test_parent_can_log_in_with_phone_number_and_password(
+        self,
+        api_client: APIClient,
+    ) -> None:
+        password = "strong-password-123"  # noqa: S105
+        user = UserFactory(
+            role=User.Role.PARENT,
+            password=password,
+            phone_number="+251911111410",
+            is_active=True,
+        )
+
+        response = api_client.post(
+            "/auth/jwt/create/",
+            {"phone_number": user.phone_number, "password": password},
+            format="json",
+        )
+
+        assert response.status_code == HTTPStatus.OK
+        assert "access" in response.data
+        assert "refresh" in response.data
+        assert "refresh_token" in response.cookies
+
+    def test_parent_login_rejects_wrong_password(
+        self,
+        api_client: APIClient,
+    ) -> None:
+        user = UserFactory(
+            role=User.Role.PARENT,
+            password="correct-password-123",  # noqa: S106
+            phone_number="+251911111411",
+            is_active=True,
+        )
+
+        response = api_client.post(
+            "/auth/jwt/create/",
+            {"phone_number": user.phone_number, "password": "wrong-password"},
+            format="json",
+        )
+
+        assert response.status_code == HTTPStatus.UNAUTHORIZED
+        assert response.data["errors"][0]["code"] == "no_active_account"
+
+    def test_parent_login_rejects_inactive_parent_account(
+        self,
+        api_client: APIClient,
+    ) -> None:
+        password = "strong-password-123"  # noqa: S105
+        user = UserFactory(
+            role=User.Role.PARENT,
+            password=password,
+            phone_number="+251911111412",
+            is_active=False,
+        )
+
+        response = api_client.post(
+            "/auth/jwt/create/",
+            {"phone_number": user.phone_number, "password": password},
+            format="json",
+        )
+
+        assert response.status_code == HTTPStatus.UNAUTHORIZED
+        assert response.data["errors"][0]["code"] == "no_active_account"
+
+
+@pytest.mark.django_db
 class TestOrganizationApprovalMagicLinkExchange:
     @pytest.fixture
     def api_client(self) -> APIClient:

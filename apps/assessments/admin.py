@@ -1,5 +1,6 @@
 from assessments.models import Assessment
 from assessments.models import AssessmentResult
+from assessments.models import HomeworkConfirmation
 from django.contrib import admin
 
 
@@ -89,3 +90,22 @@ class AssessmentResultAdmin(admin.ModelAdmin):
     @admin.display(description="Total Marks")
     def get_total(self, obj):
         return obj.assessment.total_marks
+
+
+@admin.register(HomeworkConfirmation)
+class HomeworkConfirmationAdmin(admin.ModelAdmin):
+    list_display = (
+        "student",
+        "assessment",
+        "is_confirmed",
+        "confirmed_by",
+        "confirmed_at",
+    )
+    list_filter = ("is_confirmed", "organization", "branch", "section")
+    search_fields = (
+        "student__first_name",
+        "student__last_name",
+        "student__roll_no",
+        "assessment__title",
+    )
+    readonly_fields = ("created_at", "updated_at", "confirmed_at")

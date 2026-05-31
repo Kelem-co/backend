@@ -4,7 +4,12 @@ from accounts.api.serializers import UserSerializer
 from accounts.models import User
 from accounts.services import normalize_phone_number
 from branches.models import Branch
+from django.contrib.auth.password_validation import validate_password
+from django.contrib.auth.tokens import default_token_generator
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
+from django.utils.encoding import force_str
+from django.utils.http import urlsafe_base64_decode
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 from students.models import Parent
@@ -718,6 +723,60 @@ class ParentInviteSerializer(serializers.Serializer):
 class ParentCompleteInvitationSerializer(serializers.Serializer):
     uid = serializers.CharField()
     token = serializers.CharField()
+    phone_number = serializers.CharField(max_length=20)
+    otp_code = serializers.RegexField(r"^\d{6}$")
+    new_password = serializers.CharField(trim_whitespace=False)
+
+    def validate_phone_number(self, value: str) -> str:
+        try:
+            return normalize_phone_number(value)
+        except ValueError as err:
+            raise ValidationError(str(err)) from err
+
+    def validate_uid(self, value: str) -> str:
+        try:
+            user_id = force_str(urlsafe_base64_decode(value))
+            user = User.objects.get(pk=user_id)
+        except (TypeError, ValueError, OverflowError, User.DoesNotExist) as err:
+            message = "Invalid user ID."
+            raise ValidationError(message) from err
+
+        self.context["target_user"] = user
+        return value
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        user = self.context.get("target_user")
+
+        if user is None:
+            raise ValidationError({"uid": "Invalid user ID."})
+
+        if user.role != User.Role.PARENT or user.is_active:
+            raise ValidationError({"uid": "Invalid or expired invitation."})
+
+        if not default_token_generator.check_token(user, attrs["token"]):
+            raise ValidationError({"token": "Invalid or expired token."})
+
+        try:
+            parent_profile = user.parent_profile
+        except Parent.DoesNotExist as err:
+            raise ValidationError({"uid": "Invalid or expired invitation."}) from err
+
+        if parent_profile.is_active:
+            raise ValidationError({"uid": "Invalid or expired invitation."})
+
+        if attrs["phone_number"] != (user.phone_number or ""):
+            raise ValidationError(
+                {"phone_number": "Phone number does not match this invitation."},
+            )
+
+        try:
+            validate_password(attrs["new_password"], user=user)
+        except DjangoValidationError as err:
+            raise ValidationError({"new_password": list(err.messages)}) from err
+
+        self.context["target_parent_profile"] = parent_profile
+        return attrs
 
 
 # ---------------------------------------------------------------------------

@@ -176,6 +176,10 @@ class Migration(migrations.Migration):
             migrate_parent_profiles,
             migrations.RunPython.noop,
         ),
+        migrations.AlterUniqueTogether(
+            name="parentstudentlink",
+            unique_together={("student", "parent_profile")},
+        ),
         migrations.RemoveField(
             model_name="parentstudentlink",
             name="parent",
@@ -194,5 +198,9 @@ class Migration(migrations.Migration):
                 to="students.parent",
                 verbose_name="Parent",
             ),
+        ),
+        migrations.AlterUniqueTogether(
+            name="parentstudentlink",
+            unique_together={("student", "parent")},
         ),
     ]

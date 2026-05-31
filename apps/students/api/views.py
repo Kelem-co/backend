@@ -2,15 +2,13 @@ import secrets
 
 from accounts.email import ParentInvitationEmail
 from accounts.models import User
+from accounts.services import consume_parent_login_otp
 from accounts.services import create_invitation_link
 from accounts.sms import send_parent_invitation_sms
 from branches.models import Branch
-from django.contrib.auth.tokens import default_token_generator
 from django.db import transaction
 from django.db.models import Prefetch
 from django.utils import timezone
-from django.utils.encoding import force_str
-from django.utils.http import urlsafe_base64_decode
 from drf_spectacular.utils import OpenApiParameter
 from drf_spectacular.utils import OpenApiTypes
 from drf_spectacular.utils import extend_schema
@@ -18,7 +16,7 @@ from drf_spectacular.utils import extend_schema_view
 from rest_framework import status
 from rest_framework import viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import ValidationError
+from rest_framework.filters import OrderingFilter
 from rest_framework.filters import SearchFilter
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -92,6 +90,16 @@ STUDENT_LIST_PARAMETERS = [
         enum=[choice for choice, _label in Student.Gender.choices],
         description="Filter by student gender.",
     ),
+    OpenApiParameter(
+        name="ordering",
+        type=OpenApiTypes.STR,
+        location=OpenApiParameter.QUERY,
+        description=(
+            "Sort by field name. Prefix with '-' for descending. "
+            "Allowed: first_name, last_name, roll_no, created_at, "
+            "current_section__name, current_section__grade__name."
+        ),
+    ),
 ]
 
 STUDENT_BY_SECTION_PARAMETERS = [
@@ -129,6 +137,26 @@ STUDENT_BY_GRADE_PARAMETERS = [
         description="Optional section id within the selected grade.",
     ),
 ]
+
+
+def set_parent_activation_state(
+    *,
+    user: User,
+    parent: Parent,
+    is_active: bool,
+    verified_at=None,
+    update_password: bool = False,
+) -> None:
+    user.is_active = is_active
+    user.verified_at = verified_at
+    user_update_fields = ["is_active", "verified_at", "updated_at"]
+    if update_password:
+        user_update_fields.insert(0, "password")
+    user.save(update_fields=user_update_fields)
+
+    parent.is_active = is_active
+    parent.save(update_fields=["is_active", "updated_at"])
+
 
 PARENT_LIST_PARAMETERS = [
     OpenApiParameter(
@@ -245,7 +273,7 @@ class StudentViewSet(viewsets.ModelViewSet):
     """
 
     lookup_field = "id"
-    filter_backends = [SearchFilter]
+    filter_backends = [SearchFilter, OrderingFilter]
     search_fields = [
         "first_name",
         "last_name",
@@ -253,6 +281,15 @@ class StudentViewSet(viewsets.ModelViewSet):
         "current_section__name",
         "current_section__grade__name",
     ]
+    ordering_fields = [
+        "first_name",
+        "last_name",
+        "roll_no",
+        "created_at",
+        "current_section__name",
+        "current_section__grade__name",
+    ]
+    ordering = ["first_name", "last_name", "id"]
 
     def _base_queryset(self):
         return Student.objects.select_related(
@@ -744,7 +781,7 @@ class ParentStudentLinkViewSet(viewsets.ModelViewSet):
 class ParentInviteView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def post(self, request):  # noqa: PLR0915
+    def post(self, request):
         serializer = ParentInviteSerializer(
             data=request.data,
             context={"request": request},
@@ -835,9 +872,12 @@ class ParentInviteView(APIView):
             parent.branches.add(branch)
 
             # Ensure invited parents always remain inactive until invitation completion.
-            user.is_active = False
-            user.verified_at = None
-            user.save(update_fields=["is_active", "verified_at", "updated_at"])
+            set_parent_activation_state(
+                user=user,
+                parent=parent,
+                is_active=False,
+                verified_at=None,
+            )
 
             invitation_link = create_invitation_link(
                 user=user,
@@ -885,34 +925,24 @@ class ParentCompleteInvitationView(APIView):
         serializer = ParentCompleteInvitationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        uid = serializer.validated_data["uid"]
-        token = serializer.validated_data["token"]
+        user = serializer.context["target_user"]
+        parent_profile = serializer.context["target_parent_profile"]
 
-        try:
-            user_id = force_str(urlsafe_base64_decode(uid))
-            user = User.objects.get(pk=user_id)
-        except (TypeError, ValueError, OverflowError, User.DoesNotExist) as err:
-            raise ValidationError({"uid": "Invalid user ID."}) from err
+        consume_parent_login_otp(
+            user=user,
+            raw_code=serializer.validated_data["otp_code"],
+        )
 
-        if user.role != User.Role.PARENT or user.is_active:
-            raise ValidationError({"uid": "Invalid or expired invitation."})
-
-        if not default_token_generator.check_token(user, token):
-            raise ValidationError({"token": "Invalid or expired token."})
-
-        try:
-            parent_profile = user.parent_profile
-        except Parent.DoesNotExist as err:
-            raise ValidationError({"uid": "Invalid or expired invitation."}) from err
-
-        user.is_active = True
-        user.verified_at = timezone.now()
-        user.save(update_fields=["is_active", "verified_at", "updated_at"])
-
-        parent_profile.is_active = True
-        parent_profile.save(update_fields=["is_active", "updated_at"])
+        user.set_password(serializer.validated_data["new_password"])
+        set_parent_activation_state(
+            user=user,
+            parent=parent_profile,
+            is_active=True,
+            verified_at=timezone.now(),
+            update_password=True,
+        )
 
         return Response(
-            {"message": "Parent account activated successfully."},
+            {"message": "Password set and parent account activated successfully."},
             status=status.HTTP_200_OK,
         )
