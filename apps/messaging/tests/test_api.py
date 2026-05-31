@@ -101,6 +101,52 @@ def test_create_thread_and_message_and_mark_read(db):
         reader=teacher.user,
     ).exists()
 
+    second_read_resp = teacher_client.post(
+        f"/api/chat-threads/{thread_id}/mark-read/",
+        {},
+        format="json",
+    )
+    assert second_read_resp.status_code == status.HTTP_200_OK
+    assert second_read_resp.data["count"] == 0
+
+
+def test_resolve_thread_returns_matching_conversation(db):
+    student = StudentFactory()
+    parent = ParentFactory()
+    parent.organizations.add(student.organization)
+    parent.branches.add(student.branch)
+    ParentStudentLink.objects.create(
+        parent=parent,
+        student=student,
+        relationship_type="MOTHER",
+    )
+
+    teacher = TeacherFactory(_student=student)
+    _assign_teacher_to_student_section(teacher, student)
+
+    thread = ChatThreadFactory(
+        parent=parent,
+        teacher=teacher,
+        student=student,
+        organization=student.organization,
+        branch=student.branch,
+    )
+    thread.messages.create(sender=parent.user, text="First message")
+
+    parent_client = _client(parent.user)
+    resp = parent_client.get(
+        "/api/chat-threads/resolve/",
+        {
+            "student": str(student.id),
+            "teacher": str(teacher.id),
+        },
+    )
+
+    assert resp.status_code == status.HTTP_200_OK
+    assert resp.data["thread"]["id"] == str(thread.id)
+    assert len(resp.data["messages"]) == 1
+    assert resp.data["messages"][0]["text"] == "First message"
+
 
 def test_reject_invalid_attachment_or_access(db):
     thread = ChatThreadFactory()
