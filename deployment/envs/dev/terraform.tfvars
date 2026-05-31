@@ -14,15 +14,15 @@ ssh_cidr_blocks    = ["0.0.0.0/0"]
 security_group_rules = [
   {
     type        = "ingress"
-    from_port   = 8000
-    to_port     = 8000
+    from_port   = 80
+    to_port     = 80
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   },
   {
     type        = "ingress"
-    from_port   = 9025
-    to_port     = 9025
+    from_port   = 443
+    to_port     = 443
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   },
@@ -37,3 +37,4 @@ instance_type = "t3.small"
 ami_names     = ["ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*"]
 ami_owners    = ["099720109477"]
 volume_size   = 30
+swap_size_mib = 4096

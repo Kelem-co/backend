@@ -65,13 +65,23 @@ def normalize_phone_number(phone_number: str) -> str:
     return f"+{digits}" if has_plus else digits
 
 
-def build_frontend_url(path: str) -> str:
-    domain = str(settings.FRONTEND_DOMAIN).rstrip("/")
+def get_frontend_domain_for_user(user: User | None) -> str:
+    role = getattr(user, "role", "")
+    role_domains = getattr(settings, "FRONTEND_ROLE_DOMAINS", {})
+    return str(role_domains.get(role) or settings.FRONTEND_DOMAIN)
+
+
+def get_frontend_protocol_for_user(user: User | None) -> str:
+    return str(settings.FRONTEND_PROTOCOL)
+
+
+def build_frontend_url(path: str, *, user: User | None = None) -> str:
+    domain = get_frontend_domain_for_user(user).rstrip("/")
     parsed_domain = urlsplit(domain)
     if parsed_domain.scheme and parsed_domain.netloc:
         base_url = domain
     else:
-        base_url = f"{settings.FRONTEND_PROTOCOL}://{domain}"
+        base_url = f"{get_frontend_protocol_for_user(user)}://{domain}"
     return f"{base_url}/{path.lstrip('/')}"
 
 
@@ -86,7 +96,7 @@ def create_invitation_link(*, user: User, path_template: str) -> InvitationLink:
     path = path_template.format(uid=uid, token=token)
     return InvitationLink(
         path=path,
-        full_url=build_frontend_url(path),
+        full_url=build_frontend_url(path, user=user),
     )
 
 
@@ -212,6 +222,6 @@ def get_magic_link_email_context(
         "user": user,
         "organization_name": organization_name,
         "url": build_frontend_approval_magic_link(user=user, raw_token=raw_token),
-        "domain": settings.FRONTEND_DOMAIN,
-        "protocol": settings.FRONTEND_PROTOCOL,
+        "domain": get_frontend_domain_for_user(user),
+        "protocol": get_frontend_protocol_for_user(user),
     }

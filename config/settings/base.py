@@ -264,6 +264,32 @@ FRONTEND_PROTOCOL = env(
     "FRONTEND_PROTOCOL",
     default="http" if DEBUG else "https",
 )
+# Optional role-specific frontend domains used for activation/invitation links.
+# Each value may be a full origin (for example https://teachers.kelem.app) or
+# just a host (for example teachers.kelem.app). Unset roles fall back to
+# FRONTEND_DOMAIN.
+FRONTEND_ORGANIZATION_DOMAIN = env(
+    "FRONTEND_ORGANIZATION_DOMAIN",
+    default=FRONTEND_DOMAIN,
+)
+FRONTEND_BRANCH_ADMIN_DOMAIN = env(
+    "FRONTEND_BRANCH_ADMIN_DOMAIN",
+    default=FRONTEND_DOMAIN,
+)
+FRONTEND_TEACHER_DOMAIN = env(
+    "FRONTEND_TEACHER_DOMAIN",
+    default=FRONTEND_DOMAIN,
+)
+FRONTEND_PARENT_DOMAIN = env(
+    "FRONTEND_PARENT_DOMAIN",
+    default=FRONTEND_DOMAIN,
+)
+FRONTEND_ROLE_DOMAINS = {
+    "ORGANIZATION": FRONTEND_ORGANIZATION_DOMAIN,
+    "BRANCH_ADMIN": FRONTEND_BRANCH_ADMIN_DOMAIN,
+    "TEACHER": FRONTEND_TEACHER_DOMAIN,
+    "PARENT": FRONTEND_PARENT_DOMAIN,
+}
 SMS_BACKEND = env(
     "SMS_BACKEND",
     default="accounts.sms.LoggingSMSBackend",
@@ -454,8 +480,9 @@ CORS_ALLOWED_ORIGINS = env.list(
     ],
 )
 CORS_ALLOWED_ORIGIN_REGEXES = [
-    r"^https?://localhost(?::\d+)?$",
-    r"^https?://127\.0\.0\.1(?::\d+)?$",
+    r"^/api/.*$",
+    r"^/auth/.*$",
+    r"^https://([a-z0-9-]+\.)?kelem\.app$",
 ]
 CORS_ALLOW_CREDENTIALS = True
 CSRF_TRUSTED_ORIGINS = env.list(

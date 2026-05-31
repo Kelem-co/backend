@@ -1,3 +1,6 @@
+This deployment bootstraps swap on AWS EC2 instances through the default `user_data` template.
+Existing instances will not pick up bootstrap script changes automatically because `deployment/main.tf` currently ignores `user_data` drift; recreate or reprovision the instance to apply updated swap setup.
+
 <!-- BEGIN_TF_DOCS -->
 ## Requirements
 
@@ -54,6 +57,7 @@ No modules.
 | <a name="input_destination_cidr_block"></a> [destination\_cidr\_block](#input\_destination\_cidr\_block) | CIDR block for the default route (e.g., 0.0.0.0/0) | `string` | `"0.0.0.0/0"` | no |
 | <a name="input_security_group_rules"></a> [security\_group\_rules](#input\_security\_group\_rules) | Additional security group rules for the cluster instances. | <pre>list(object({<br/>    type                     = string<br/>    from_port                = number<br/>    to_port                  = number<br/>    protocol                 = string<br/>    cidr_blocks              = optional(list(string))<br/>    source_security_group_id = optional(string)<br/>    description              = optional(string)<br/>  }))</pre> | `[]` | no |
 | <a name="input_ssh_cidr_blocks"></a> [ssh\_cidr\_blocks](#input\_ssh\_cidr\_blocks) | CIDR blocks allowed to reach SSH on the cluster instances. | `list(string)` | `[]` | no |
+| <a name="input_swap_size_mib"></a> [swap\_size\_mib](#input\_swap\_size\_mib) | Size of the AWS EC2 swap file in MiB. | `number` | `2048` | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | Additional tags to apply to resources | `map(string)` | `{}` | no |
 | <a name="input_user_data_template_file"></a> [user\_data\_template\_file](#input\_user\_data\_template\_file) | Path to the user data template file, relative to the module directory. | `string` | `"templates/user_data.sh.tftpl"` | no |
 | <a name="input_user_data_template_vars"></a> [user\_data\_template\_vars](#input\_user\_data\_template\_vars) | Variables to render the user data template with. | `map(string)` | `{}` | no |

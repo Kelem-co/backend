@@ -9,5 +9,13 @@ locals {
     }
   )
 
-  user_data = templatefile("${path.module}/${var.user_data_template_file}", var.user_data_template_vars)
+  user_data = templatefile(
+    "${path.module}/${var.user_data_template_file}",
+    merge(
+      var.user_data_template_vars,
+      {
+        SWAP_SIZE_MIB = tostring(var.swap_size_mib)
+      }
+    )
+  )
 }

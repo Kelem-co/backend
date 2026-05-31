@@ -4,16 +4,16 @@ from unittest.mock import patch
 
 import pytest
 from accounts.models import User
+from accounts.services import create_parent_login_otp
 from accounts.tests.factories import UserFactory
 from branches.tests.factories import BranchAdminFactory
 from branches.tests.factories import BranchFactory
 from django.contrib.auth.tokens import default_token_generator
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
-from rest_framework.test import APIClient
 from rest_framework import status
+from rest_framework.test import APIClient
 from rest_framework.test import APIRequestFactory
-from accounts.services import create_parent_login_otp
 from students.api.views import ParentCompleteInvitationView
 from students.api.views import ParentInviteView
 from students.models import Parent
@@ -32,7 +32,13 @@ class TestParentInviteView:
         mock_send_sms,
         mock_send_email,
         api_rf: APIRequestFactory,
+        settings,
     ):
+        settings.FRONTEND_PARENT_DOMAIN = "https://parents.kelem.app"
+        settings.FRONTEND_ROLE_DOMAINS = {
+            **settings.FRONTEND_ROLE_DOMAINS,
+            User.Role.PARENT: settings.FRONTEND_PARENT_DOMAIN,
+        }
         user = UserFactory()
         branch = BranchFactory(school__organization__owner=user)
 
@@ -54,6 +60,9 @@ class TestParentInviteView:
 
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["message"] == "Parent invitation sent successfully."
+        assert response.data["invitation_url"].startswith(
+            settings.FRONTEND_PARENT_DOMAIN,
+        )
         assert "/complete-parent-invitation/" in response.data["invitation_url"]
         assert response.data["sms_sent"] is True
 

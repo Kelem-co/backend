@@ -25,7 +25,17 @@ class TestBranchAdminInviteView:
         return APIRequestFactory()
 
     @patch("accounts.email.send_email_task.delay")
-    def test_invite_success(self, mock_send_email, api_rf: APIRequestFactory):
+    def test_invite_success(
+        self,
+        mock_send_email,
+        api_rf: APIRequestFactory,
+        settings,
+    ):
+        settings.FRONTEND_BRANCH_ADMIN_DOMAIN = "https://branches.kelem.app"
+        settings.FRONTEND_ROLE_DOMAINS = {
+            **settings.FRONTEND_ROLE_DOMAINS,
+            User.Role.BRANCH_ADMIN: settings.FRONTEND_BRANCH_ADMIN_DOMAIN,
+        }
         user = UserFactory()
         branch = BranchFactory(school__organization__owner=user)
 
@@ -48,7 +58,7 @@ class TestBranchAdminInviteView:
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["message"] == "Invitation sent successfully."
         assert response.data["invitation_url"].startswith(
-            settings.FRONTEND_DOMAIN,
+            settings.FRONTEND_BRANCH_ADMIN_DOMAIN,
         )
         assert "/complete-invitation/" in response.data["invitation_url"]
 
