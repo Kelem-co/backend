@@ -1,3 +1,5 @@
+import json
+
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.db.models import Prefetch
@@ -9,11 +11,16 @@ from rest_framework import status
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.renderers import JSONRenderer
 from rest_framework.response import Response
 
 from .serializers import ChatMessageSerializer
 from .serializers import ChatThreadSerializer
 from .serializers import MarkReadSerializer
+
+
+def _json_safe(data):
+    return json.loads(JSONRenderer().render(data))
 
 
 class ThreadViewSet(viewsets.ModelViewSet):
@@ -66,7 +73,7 @@ class ThreadViewSet(viewsets.ModelViewSet):
         payload = {
             "event": "message.created",
             "thread_id": str(thread.id),
-            "message": message_data,
+            "message": _json_safe(message_data),
         }
         async_to_sync(get_channel_layer().group_send)(
             f"chat_thread_{thread.id}",
