@@ -5,7 +5,7 @@
   <br><br>
   <h1>Kelem Backend</h1>
   <p><em>Academic management platform API for organizations, schools, branches, teachers, students, parents, and school operations.</em></p>
-  <p>
+  <!-- <p>
     <strong>Course:</strong> Software Engineering Final Year Project<br>
     <strong>Institution:</strong> Addis Ababa Science and Technology University
   </p>
@@ -17,7 +17,7 @@
     <a href="https://github.com/oddegen">oddegen</a> ·
     <a href="https://github.com/RobelD420">RobelD420</a> ·
     <a href="https://github.com/Tonetor777">Tonetor777</a>
-  </p>
+  </p> -->
 </div>
 
 ---
